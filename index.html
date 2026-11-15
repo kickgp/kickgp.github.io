@@ -1853,7 +1853,7 @@ const View = (() => {
   }
   const skySz = new THREE.Vector2();
   function render() {
-    if (SK && SK.skyRT) { renderer.getDrawingBufferSize(skySz); const dv = LITE ? 4 : 2, w = Math.max(64, Math.round(skySz.x / dv)), h = Math.max(64, Math.round(skySz.y / dv)); if (SK.skyRT.width !== w || SK.skyRT.height !== h) SK.skyRT.setSize(w, h); renderer.setRenderTarget(SK.skyRT); renderer.render(SK.skyScene, camera); renderer.setRenderTarget(null); }
+    if (SK && SK.skyRT) { renderer.getDrawingBufferSize(skySz); const dv = LITE ? 3 : 2, w = Math.max(64, Math.round(skySz.x / dv)), h = Math.max(64, Math.round(skySz.y / dv)); if (SK.skyRT.width !== w || SK.skyRT.height !== h) SK.skyRT.setSize(w, h); renderer.setRenderTarget(SK.skyRT); renderer.render(SK.skyScene, camera); renderer.setRenderTarget(null); }
     if (quality >= 1 && rt && !LITE) { roadMat.uniforms.uRefl.value = puddleMat.uniforms.uRefl.value = 1; renderReflection(); } else roadMat.uniforms.uRefl.value = puddleMat.uniforms.uRefl.value = 0;
     if (quality >= 2 && composer) composer.render(); else renderer.render(scene, camera);
   }
@@ -1926,7 +1926,8 @@ class KRoom {
 }
 /* ===== KICK GP game v2: input, timing, ghost + live delta, HUD, sound ===== */
 (() => {
-  const $ = s => document.querySelector(s), { clamp, lerp, DT } = KGP; const COURSE = (() => { let c = 'rush'; try { c = localStorage.getItem('kickgp.course') || 'rush'; } catch (e) { } return KGP.COURSES[c] && !KGP.COURSES[c].hidden ? c : 'rush'; })(); const T = KGP.buildTrack(COURSE), N = T.N;
+  for (const k of Object.keys(KGP.COURSES)) if (k !== 'heaven') KGP.COURSES[k].hidden = true;
+  const $ = s => document.querySelector(s), { clamp, lerp, DT } = KGP; const COURSE = (() => { let c = 'heaven'; try { c = localStorage.getItem('kickgp.course') || 'heaven'; } catch (e) { } return KGP.COURSES[c] && !KGP.COURSES[c].hidden ? c : 'heaven'; })(); const T = KGP.buildTrack(COURSE), N = T.N;
   // landscape gate: phones and tablets must be held sideways
   const coarse = matchMedia('(pointer:coarse)').matches; function orientCheck() { const port = coarse && innerHeight > innerWidth; $('#rotate').hidden = !port; if (port) { try { if (mode === 'race' || mode === 'count') pause(); } catch (e) { } } }
   addEventListener('resize', () => setTimeout(orientCheck, 60)); addEventListener('orientationchange', () => setTimeout(orientCheck, 120)); orientCheck();
@@ -1942,14 +1943,14 @@ class KRoom {
   if (coarse && T.heaven) T.assist = true;
   const cv = $('#gl'); View.init(cv, T, window.__KGP_GL); if (coarse) { const sh0 = View.shake; View.shake = k => sh0(k * .3); }
   // 画面の処理が限界を超えて描画が止まったら、解像度を下げて読み込み直す
-  cv.addEventListener('webglcontextlost', e => { e.preventDefault(); try { localStorage.setItem('kickgp.rs', Math.max(.5, (RS || 1) - .25)); } catch (_) { } try { sessionStorage.setItem('kgp.lost', String((+sessionStorage.getItem('kgp.lost') || 0) + 1)); } catch (_) { } setTimeout(() => location.reload(), 400); });
+  cv.addEventListener('webglcontextlost', e => { e.preventDefault(); try { localStorage.setItem('kickgp.rs2', Math.max(.75, (RS || 1) - .25)); } catch (_) { } try { sessionStorage.setItem('kgp.lost', String((+sessionStorage.getItem('kgp.lost') || 0) + 1)); } catch (_) { } setTimeout(() => location.reload(), 400); });
   try { const lost = +sessionStorage.getItem('kgp.lost') || 0; if (lost) console.error('GPU限界で再読み込み ' + lost + '回'); } catch (_) { }
   if (coarse) { const fb = document.getElementById('fpsBadge'); let fc = 0, ft = performance.now(); fb.hidden = false; (function fl(now) { fc++; if (now - ft > 1000) { fb.textContent = Math.round(fc * 1000 / (now - ft)) + 'fps ×' + RS.toFixed(2) + ' q' + View.quality; fc = 0; ft = now; } requestAnimationFrame(fl); })(ft); }
   try { const M = window.KGP_MODELS; if (M && THREE.GLTFLoader) for (const name of Object.keys(M)) { const bin = atob(M[name]), buf = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
       new THREE.GLTFLoader().parse(buf.buffer, '', g => { View.setModel(name, g.scene); window.__kgpModel = (window.__kgpModel || '') + name + ' '; }, e => console.warn('model', name, e)); } } catch (e) { console.warn('model', e); }
   if (T.heaven && THREE.GLTFLoader) fetch('human.glb').then(r => r.ok ? r.arrayBuffer() : Promise.reject(r.status)).then(ab => new THREE.GLTFLoader().parse(ab, '', g => View.setHuman(g), e => console.warn('human', e))).catch(e => console.warn('human', e));
-  let RS = 1; try { RS = Math.min(1, Math.max(.5, +localStorage.getItem('kickgp.rs') || 1)); } catch (e) { }
-  function resize() { const w = cv.clientWidth || innerWidth, h = cv.clientHeight || innerHeight; View.resize(w, h, Math.min(coarse ? 1.25 : 2, window.devicePixelRatio || 1) * RS); }
+  let RS = 1; try { RS = Math.min(1, Math.max(.75, +localStorage.getItem('kickgp.rs2') || 1)); } catch (e) { }
+  function resize() { const w = cv.clientWidth || innerWidth, h = cv.clientHeight || innerHeight; View.resize(w, h, Math.min(2, window.devicePixelRatio || 1) * RS); }
   addEventListener('resize', resize); resize();
 
   /* ---- save ---- */
@@ -2416,7 +2417,7 @@ class KRoom {
       if (mode === 'race') callout(); else el.call.hidden = true;
       el.vig.style.opacity = (.42 + clamp(car.v / KGP.TUNE.vMax, 0, 1.1) * .4).toFixed(2);
       if (toastT > 0 && (toastT -= dt) <= 0) el.toast.hidden = true; if (flagT > 0 && (flagT -= dt) <= 0) el.flag.hidden = true;
-      if (!save.qLock && (mode === 'race' || (coarse && mode === 'title'))) { fAcc += Math.min(rawDt, .1); fN++; if (fN >= (coarse ? 60 : 90)) { const avg = fAcc / fN; fAcc = fN = 0; if (avg > (coarse ? .022 : .03)) { if (++slow >= 2) { if (RS > (coarse ? .51 : .61)) { RS = Math.max(coarse ? .5 : .6, RS - .14); try { localStorage.setItem('kickgp.rs', RS); } catch (e) { } resize(); } else if (View.quality > 0) { View.setQuality(View.quality - 1); save.q = View.quality; persist(); } slow = 0; } } else slow = 0; } } }
+      if (!save.qLock && (mode === 'race' || (coarse && mode === 'title'))) { fAcc += Math.min(rawDt, .1); fN++; if (fN >= (coarse ? 60 : 90)) { const avg = fAcc / fN; fAcc = fN = 0; if (avg > (coarse ? .022 : .03)) { if (++slow >= 2) { if (RS > (coarse ? .76 : .61)) { RS = Math.max(coarse ? .75 : .6, RS - .125); try { localStorage.setItem('kickgp.rs2', RS); } catch (e) { } resize(); } else if (View.quality > 0) { View.setQuality(View.quality - 1); save.q = View.quality; persist(); } slow = 0; } } else slow = 0; } } }
     { const ldv = T.line ? T.line[car.idx] : 0, onL = !car.air && car.v > 12 && Math.abs(car.d - ldv) < .75 ? 1 : 0, under = T.theme === 'abyss' && car.y < -2 && mode !== 'title' ? 1 : 0; if (under && !frame.under && mode === 'race') Snd.dive(); frame.under = under;
       Snd.frame(car, inp.throttle, mode === 'race' || mode === 'finish', P.boosting || P.kick > 0, onL, under); }
     { const racing = mode === 'race' || mode === 'count' || mode === 'finish'; if (T.heaven) Snd.heaven(clamp((car.y - 4) / 200, 0, 1), (mode === 'race' || mode === 'finish') && mode !== 'paused'); Snd.music(mode === 'paused' ? .08 : racing ? .4 : .2, racing ? clamp(car.v / 30, 0, 1) * .75 + (P.boosting ? .25 : 0) : .12, racing ? flow / 100 : .2); }
