@@ -264,6 +264,9 @@ button[disabled]{opacity:.4}
 .daily b{color:#ffd24a;font-style:italic}
 .daily.done{border-color:rgba(61,255,162,.6);background:rgba(61,255,162,.10)}
 
+body.heaven #styleBox{display:none!important}
+body.heaven .glass{background:rgba(16,28,48,.32);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);border-color:rgba(245,243,234,.08)}
+body.heaven .cluster{opacity:.82} body.heaven #map{opacity:.75} body.heaven .toast .d{background:rgba(11,19,34,.35)!important;border-bottom-width:1px!important}
 #flowBox{width:clamp(118px,30vh,160px);margin-bottom:6px;pointer-events:none;transform:skewX(-6deg)}
 #flowBox span{display:block;font:italic 800 12px/1 Saira,sans-serif;letter-spacing:.14em;color:#A5B3C2;margin-bottom:4px}
 #flowBox i{display:block;height:7px;border-radius:4px;background:rgba(16,28,48,.7);overflow:hidden;border:1px solid rgba(57,231,224,.35)}
@@ -1941,6 +1944,8 @@ class KRoom {
     try { history.pushState({ kgp: 1 }, ''); addEventListener('popstate', () => { try { history.pushState({ kgp: 1 }, ''); } catch (e) { } try { pause(); } catch (e) { } }); } catch (e) { }
   }
   if (coarse && T.heaven) T.assist = true;
+  if (T.heaven) document.body.classList.add('heaven');
+  if (T.heaven) { const sh1 = View.shake; View.shake = k => sh1(k * .45); }
   const cv = $('#gl'); View.init(cv, T, window.__KGP_GL); if (coarse) { const sh0 = View.shake; View.shake = k => sh0(k * .3); }
   // 画面の処理が限界を超えて描画が止まったら、解像度を下げて読み込み直す
   cv.addEventListener('webglcontextlost', e => { e.preventDefault(); try { localStorage.setItem('kickgp.rs2', Math.max(.75, (RS || 1) - .25)); } catch (_) { } try { sessionStorage.setItem('kgp.lost', String((+sessionStorage.getItem('kgp.lost') || 0) + 1)); } catch (_) { } setTimeout(() => location.reload(), 400); });
@@ -2018,7 +2023,7 @@ class KRoom {
         if (alt > .85 && beat === 0) ch.forEach(m => { hnote(m2f(m + 12) * 1.003, tt, 3.2, 'sawtooth', .008, .9); hnote(m2f(m + 12) * .997, tt, 3.2, 'sawtooth', .008, .9); });
         hv.next += spb; } }
     function heavenDuck(sec) { if (ac) hv.duck = ac.currentTime + sec; }
-    function music(level, inten, flow = 0) { if (!ac || !mus.bus) return; mus.inten = Math.max(inten, flow * .9); mus.flow = flow; inten = mus.inten; const t = ac.currentTime; mus.bus.gain.setTargetAtTime(mus.on ? level : 0, t, .3); mus.lp.frequency.setTargetAtTime(380 + inten * inten * 7000, t, .12); }
+    function music(level, inten, flow = 0) { if (!ac || !mus.bus) return; mus.inten = Math.max(inten, flow * .9); mus.flow = flow; inten = mus.inten; const t = ac.currentTime; mus.bus.gain.setTargetAtTime(mus.on && !T.heaven ? level : 0, t, .3); mus.lp.frequency.setTargetAtTime(380 + inten * inten * 7000, t, .12); }
 
     function frame(c, thr, on, bst, rail = 0, under = 0) { if (!ac) return; const t = ac.currentTime, v = c.v * (bst ? 1.25 : 1);
       humG.gain.setTargetAtTime(on ? rail * .05 : 0, t, .08); hum.frequency.setTargetAtTime(180 + v * 7, t, .05); Snd._hum2.frequency.setTargetAtTime((180 + v * 7) * 1.5, t, .05); uw.frequency.setTargetAtTime(under ? 650 : 20000, t, .12);
@@ -2026,8 +2031,8 @@ class KRoom {
       mGain.gain.setTargetAtTime(on ? (.035 + thr * .075) * (c.air ? 1.3 : 1) : 0, t, .06);
       wGain.gain.setTargetAtTime(on ? Math.min(.5, v * v / 1500) : 0, t, .08); wind.frequency.setTargetAtTime(300 + v * 30, t, .1);
       sqGain.gain.setTargetAtTime(on ? clamp(c.slide * 1.2, 0, .32) : 0, t, .03); sq.frequency.setTargetAtTime(c.wet ? 900 : 1900, t, .05); }
-    function tone(f, dur, type = 'sine', vol = .2, f2, at = 0) { if (!ac) return; const t = ac.currentTime + at, o = ac.createOscillator(), g = ac.createGain(); o.type = type; o.frequency.setValueAtTime(f, t); if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + dur); g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + .008); g.gain.exponentialRampToValueAtTime(.0001, t + dur); o.connect(g); g.connect(master); o.start(t); o.stop(t + dur + .05); }
-    function burst(dur, f, vol) { if (!ac) return; const t = ac.currentTime, s = ac.createBufferSource(); s.buffer = nb; const fl = ac.createBiquadFilter(); fl.type = 'lowpass'; fl.frequency.value = f; const g = ac.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.0001, t + dur); s.connect(fl); fl.connect(g); g.connect(master); s.start(t, Math.random()); s.stop(t + dur + .05); }
+    function tone(f, dur, type = 'sine', vol = .2, f2, at = 0) { if (!ac) return; if (T.heaven) { vol *= .35; if (type === 'square' || type === 'sawtooth') type = 'triangle'; } const t = ac.currentTime + at, o = ac.createOscillator(), g = ac.createGain(); o.type = type; o.frequency.setValueAtTime(f, t); if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + dur); g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + .008); g.gain.exponentialRampToValueAtTime(.0001, t + dur); o.connect(g); g.connect(master); o.start(t); o.stop(t + dur + .05); }
+    function burst(dur, f, vol) { if (!ac) return; if (T.heaven) { vol *= .3; f = Math.min(f, 1800); } const t = ac.currentTime, s = ac.createBufferSource(); s.buffer = nb; const fl = ac.createBiquadFilter(); fl.type = 'lowpass'; fl.frequency.value = f; const g = ac.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.0001, t + dur); s.connect(fl); fl.connect(g); g.connect(master); s.start(t, Math.random()); s.stop(t + dur + .05); }
     const chord = (fs, step, dur, type, vol) => fs.forEach((f, i) => tone(f, dur, type, vol, null, i * step));
     return { init, frame, music, heaven, heavenDuck,
       perfect: () => { chord([1047, 1319, 1568, 2093], .045, .45, 'triangle', .13); burst(.35, 7000, .22); },
@@ -2042,7 +2047,7 @@ class KRoom {
       fanfare: () => chord([523, 659, 784, 1047, 1319, 1568], .09, .6, 'triangle', .14), setMusic: v => { mus.on = v; }, get musicOn() { return mus.on; }, whoosh: g => burst(.24, 1500, clamp(.55 - g * .11, .12, .55)), zap: () => { tone(1800, .25, 'sawtooth', .16, 120); burst(.2, 6000, .4); }, drift: lv => { tone(300 + lv * 160, .3, 'sawtooth', .12, 900 + lv * 300); burst(.3, 4000, .25); }, near: () => { burst(.28, 2400, .5); tone(520, .22, 'sine', .18, 1900); }, crash: a => { burst(.4, 500, .9); tone(90, .35, 'sawtooth', .35, 38); }, pos: up => tone(up ? 880 : 330, .18, 'triangle', .14, up ? 1320 : 220), boostOn: () => { burst(.5, 5200, .32); tone(260, .5, 'sawtooth', .1, 880); }, ui: () => tone(1200, .05, 'triangle', .08, 1800), beep: hi => tone(hi ? 1320 : 660, hi ? .5 : .14, 'square', .12), land: a => { burst(.18, 300, clamp(a / 8, .2, .8)); tone(70, .2, 'sine', .4, 40); }, wall: a => { burst(.22, 900, clamp(a / 14, .25, .9)); tone(140, .12, 'sawtooth', .2, 60); },
       sector: k => { tone(k === 'p' ? 1568 : k === 'g' ? 1175 : 440, .16, 'triangle', .14); if (k === 'p') tone(2093, .22, 'triangle', .12, null, .09); }, lap: best => { (best ? [784, 988, 1175, 1568] : [659, 784]).forEach((f, i) => tone(f, .22, 'triangle', .13, null, i * .08)); } }; })();
   addEventListener('pointerdown', () => Snd.init(), { capture: true }); addEventListener('keydown', () => Snd.init(), { capture: true });
-  const buzz = p => { try { navigator.vibrate && navigator.vibrate(p); } catch (e) { } };
+  const buzz = p => { if (T.heaven && !(Array.isArray(p) && p[0] >= 60)) return; try { navigator.vibrate && navigator.vibrate(p); } catch (e) { } };
 
   /* ---- input ---- */
   const keys = {}; const pad = { id: null, ox: 0, oy: 0, x: 0, y: 0 }; const raw = { thr: 0, brk: 0, bst: 0, itm: 0 }; let kSteer = 0;
@@ -2272,9 +2277,10 @@ class KRoom {
     const a = pick(); todaySky = [a]; if (Math.random() < .1) { const b = pick(Math.random); if (b !== a) todaySky.push(b); } if (T.twist && T.twist.k === 'FULLMOON' && !todaySky.includes('meteor')) todaySky.push('meteor'); View.setSkyEvent(todaySky); }
   function skySeen(k) { const e = SKYDEX.find(o => o.k === k); if (!e) return; const isNew = !dex[k]; dex[k] = (dex[k] || 0) + 1; try { localStorage.setItem(dexKey, JSON.stringify(dex)); } catch (e2) {}
     const got = SKYDEX.filter(o => dex[o.k]).length; flag(e.en, 1.6); toast(isNew ? 'NEW SKY' : 'SKY', isNew ? 'y' : 'c', `${e.jp}　${'★'.repeat(e.r)}　図鑑 ${got}/${SKYDEX.length}`, 2.4, true); Snd.gate(); if (isNew) addStyle(800, false); }
-  function toast(html, cls, small, secs = 2.2, sm) { secs = Math.min(secs, 1.2) * .8; el.toast.hidden = true; void el.toast.offsetWidth; el.toast.className = 'toast' + (sm ? ' sm' : ''); el.toast.innerHTML = `<div class="d num ${cls}">${html}</div>${small ? `<small>${small}</small>` : ''}`; el.toast.hidden = false; toastT = secs; }
+  const QUIET = /BOOST RING|CLEAN LANDING|OVERTAKE|UPDRAFT|BOUNCE|SAVE|WIRE|DIVE|CLOUD BREAK|NEAR|DRAFT|COMBO|PERFECT|FLOW|SLIPSTREAM|LINE|^\d+\s*m/;
+  function toast(html, cls, small, secs = 2.2, sm) { if (T.heaven && mode === 'race' && QUIET.test((String(html) + ' ' + (small || '')).replace(/<[^>]*>/g, '').trim())) return; secs = Math.min(secs, 1.2) * .8; el.toast.hidden = true; void el.toast.offsetWidth; el.toast.className = 'toast' + (sm ? ' sm' : ''); el.toast.innerHTML = `<div class="d num ${cls}">${html}</div>${small ? `<small>${small}</small>` : ''}`; el.toast.hidden = false; toastT = secs; }
   function flag(text, secs = 1.2) { el.flag.hidden = true; void el.flag.offsetWidth; el.flag.innerHTML = `<b>${text}</b>`; el.flag.hidden = false; flagT = secs; }
-  function flash(a) { el.flash.style.transition = 'none'; el.flash.style.opacity = a; requestAnimationFrame(() => { el.flash.style.transition = 'opacity .6s ease-out'; el.flash.style.opacity = 0; }); }
+  function flash(a) { if (T.heaven) a *= .3; el.flash.style.transition = 'none'; el.flash.style.opacity = a; requestAnimationFrame(() => { el.flash.style.transition = 'opacity .6s ease-out'; el.flash.style.opacity = 0; }); }
 
   function onSector(k) { const cur = raceT - lapT0; splits[k] = cur; const ref = save.splits && save.splits[k]; let cls = 'g';
     if (ref != null) { const d = cur - ref; cls = d < 0 ? 'p' : 'y'; toast(fmtD(d), cls, `SECTOR ${k + 1}`, 1.8); } else toast(fmt(cur), 'g', `SECTOR ${k + 1}`, 1.8);
@@ -2370,7 +2376,7 @@ class KRoom {
       if (recK++ % 6 === 0) rec.push([+car.x.toFixed(2), +car.y.toFixed(2), +car.z.toFixed(2), +car.yaw.toFixed(3), +car.lean.toFixed(3), car.idx, car.air ? 1 : 0]); }
   }
   const HAZ = T.haz || [];
-  function callout() { let best = null; for (const h of HAZ) { const d = (h.i - car.idx + N) % N; if (d > 8 && d < 130 && (!best || d < best.d)) best = { h, d }; }
+  function callout() { if (T.heaven) { el.call.hidden = true; return; } let best = null; for (const h of HAZ) { const d = (h.i - car.idx + N) % N; if (d > 8 && d < 130 && (!best || d < best.d)) best = { h, d }; }
     if (!best) { el.call.hidden = true; return; } const key = best.h.t + best.h.i; if (el.call.dataset.k !== key) { el.call.dataset.k = key; el.call.className = 'call glass ' + best.h.c; el.call.innerHTML = `<b>${best.h.t}</b><em id="callD"></em><span class="jp">${best.h.s}</span>`; } el.call.hidden = false; const dEl = $('#callD'); if (dEl) dEl.textContent = Math.round(best.d / 10) * 10 + 'm'; }
   const fxOf = r => ({ shield: r.shield, inv: r.inv, shock: r.shocked });
   function syncWorld() { View.setRivals(R.riders.filter(r => !r.isPlayer).map(r => ({ c: r.c, w: r.w, fx: fxOf(r) }))); View.setCars(R.cars.map(c => { const o = Race.carXY(T, c); o.L = c.L; o.W = c.W; o.H = c.H; o.k = c.k; o.col = c.col; o.key = `${c.k}:${c.col.toFixed(3)}`; o.sig = c.sig; return o; })); View.setBoxes(R.boxes.map(b => { const o = Race.carXY(T, b); o.on = b.t <= 0; return o; })); }
@@ -2394,7 +2400,7 @@ class KRoom {
       R.cars.forEach((c, i) => { const ds = wrapN(car.idx - c.fi), sgn = ds >= 0 ? 1 : -1; if (carSide[i] === -1 && sgn === 1 && Math.abs(ds) < 6 && car.v - c.v > 3) Snd.whoosh(Math.abs(car.d - c.d)); carSide[i] = sgn; });
       if (race) { if (comboT > 0 && (comboT -= dt) <= 0) combo = 0; if (P.slip && mode === 'race') { draftAcc += dt; if (draftAcc > .5) { draftAcc = 0; addStyle(30, false); } }
         el.styleN.textContent = style.toLocaleString('en-US'); el.comboN.textContent = combo > 1 ? '×' + combo : ''; el.comboBar.style.width = (combo > 0 ? clamp(comboT / 5, 0, 1) * 100 : 0) + '%';
-        if (save.races < 3) { hintT += dt; const h = mode === 'count' ? '左親指で左右に曲がる。アクセルは自動。GOの瞬間に BOOST でロケットスタート' : hintT < 10 ? '光るラインの上を走ると FLOW がたまる' : hintT < 20 ? 'カーブの手前で大きく倒すと DRIFT。戻した瞬間に加速' : hintT < 29 ? '速度を落とさずラインに戻せば PERFECT DRIFT' : hintT < 37 ? 'FLOW が高いほど BOOST が強くなる' : ''; if (el.hint.dataset.h !== h) { el.hint.dataset.h = h; el.hint.textContent = h; } el.hint.hidden = !h || mode === 'finish'; } }
+        if (T.heaven && mode !== 'count') { if (!$('#hint').hidden) $('#hint').hidden = true; } else if (save.races < 3) { hintT += dt; const h = mode === 'count' ? '左親指で左右に曲がる。アクセルは自動。GOの瞬間に BOOST でロケットスタート' : hintT < 10 ? '光るラインの上を走ると FLOW がたまる' : hintT < 20 ? 'カーブの手前で大きく倒すと DRIFT。戻した瞬間に加速' : hintT < 29 ? '速度を落とさずラインに戻せば PERFECT DRIFT' : hintT < 37 ? 'FLOW が高いほど BOOST が強くなる' : ''; if (el.hint.dataset.h !== h) { el.hint.dataset.h = h; el.hint.textContent = h; } el.hint.hidden = !h || mode === 'finish'; } }
       { const ve = View.popEvent(); if (ve === 'whale') { toast('WHALE', 'c', '', .9, true); Snd.whale(); buzz([20, 40, 20]); addStyle(300, false); } else if (ve === 'cloud') { toast('CLOUD BREAK', 'c', '雲を突き抜けた', 1.0, true); Snd.cloud(); View.shake(.55); buzz([15, 30, 15]); addStyle(200, false); } else if (ve && ve.startsWith('sky:')) { skySeen(ve.slice(4)); } else if (ve === 'gate') { toast('HEAVEN GATE', 'y', '天の門', 2.0, true); Snd.gate(); Snd.heavenDuck(1.6); flash(.75); buzz([30, 60, 30, 60, 90]); addStyle(500, false); ts = .3; tsT = 1.5; } }
       flowFill.style.width = flow.toFixed(0) + '%'; flowLab.textContent = ['CRUISE', 'LEAN', 'FLOW', 'FLOW ++', 'APEX'][flowLv]; flowBox.className = 'lv' + flowLv; flowBox.hidden = !race;
       if (bst && !wasBoost) { Snd.boostOn(); buzz(20); } wasBoost = !!bst; el.bfx.style.opacity = bst ? 1 : 0;
