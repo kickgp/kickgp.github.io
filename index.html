@@ -559,6 +559,7 @@ const KGP = (() => {
         let top = at(.62), hi = -1e9; for (let i = at(.5); i < at(.75); i++) if (S[i].y > hi) { hi = S[i].y; top = i; }
         T.top = top;
         T.ramps = [{ i0: (top + 40) % N, len: 16, h: 3.0 }, { i0: at(.755), len: 14, h: 2.6 }]; T.ramp = T.ramps[0];
+        for (const [f, h] of [[.07, 2.4], [.195, 2.7], [.505, 2.6], [.545, 3.0], [.79, 2.8], [.925, 2.6], [.97, 3.2]]) T.ramps.push({ i0: at(f), len: 13, h });
         // 仕掛け：上昇気流（v=打ち上げの強さ）と雲のトランポリン
         T.lifts = [
           { i: at(.135), d: 0, r: T.halfW + .3, v: 13, k: .7, t: 'updraft' },
@@ -1866,7 +1867,7 @@ const View = (() => {
   function init(canvas, track, glctx) {
     renderer = new THREE.WebGLRenderer(Object.assign({ canvas, antialias: true, powerPreference: 'high-performance' }, glctx ? { context: glctx } : {})); renderer.setClearColor(0x05060a); build(track); renderer.setClearColor(TH.clear);
     rt = new THREE.WebGLRenderTarget(256, 128, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat }); roadMat.uniforms.tRefl.value = rt.texture; puddleMat.uniforms.tRefl.value = rt.texture;
-    if (THREE.EffectComposer && THREE.UnrealBloomPass) { try { composer = new THREE.EffectComposer(renderer); composer.addPass(new THREE.RenderPass(scene, camera)); bloom = new THREE.UnrealBloomPass(new THREE.Vector2(256, 256), .85, .55, .62); if (T.theme === 'abyss') { bloom.strength = .42; bloom.threshold = .86; bloom.radius = .45; } if (T.theme === 'sky') { bloom.strength = .22; bloom.threshold = .95; bloom.radius = .35; } if (T.heaven) { bloom.strength = .55; bloom.threshold = .83; bloom.radius = .72; } composer.addPass(bloom); if (T.heaven && THREE.ShaderPass && SK) { SK.post = heavenPass(); composer.addPass(SK.post); } } catch (e) { composer = null; } }
+    if (THREE.EffectComposer && THREE.UnrealBloomPass) { try { composer = new THREE.EffectComposer(renderer, (renderer.capabilities.isWebGL2 && THREE.WebGLMultisampleRenderTarget) ? (() => { const sz = renderer.getDrawingBufferSize(new THREE.Vector2()); const m = new THREE.WebGLMultisampleRenderTarget(Math.max(1, sz.x), Math.max(1, sz.y), { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat }); m.samples = 4; return m; })() : undefined); composer.addPass(new THREE.RenderPass(scene, camera)); bloom = new THREE.UnrealBloomPass(new THREE.Vector2(256, 256), .85, .55, .62); if (T.theme === 'abyss') { bloom.strength = .42; bloom.threshold = .86; bloom.radius = .45; } if (T.theme === 'sky') { bloom.strength = .22; bloom.threshold = .95; bloom.radius = .35; } if (T.heaven) { bloom.strength = .55; bloom.threshold = .83; bloom.radius = .72; } composer.addPass(bloom); if (T.heaven && THREE.ShaderPass && SK) { SK.post = heavenPass(); composer.addPass(SK.post); } } catch (e) { composer = null; } }
     return renderer; }
   const fwq = []; function fireworks(c, n = 5) { const hx = Math.sin(c.yaw), hz = -Math.cos(c.yaw); for (let k = 0; k < n; k++) fwq.push({ t: k * .35 + Math.random() * .2, x: c.x + hx * (18 + Math.random() * 30) + (Math.random() - .5) * 30, y: c.y + 14 + Math.random() * 14, z: c.z + hz * (18 + Math.random() * 30) + (Math.random() - .5) * 30, col: [[1, .83, .42], [.22, .9, .88], [1, .45, .37], [.95, .95, .9]][k % 4] }); }
   function hitSparks(c, n = 26) { burst(c.x + Math.sin(c.yaw) * .6, c.y + .6, c.z - Math.cos(c.yaw) * .6, n, [1, .7, .3], 8, 5); }
@@ -2201,7 +2202,7 @@ class KRoom {
   }
   // ======== HEAVEN ASCENT：メダル・区間タイム・挑戦状・動画・世界ランキング ========
   const HV = { cks: T.ckpts || [], next: 0, cur: [], run: null, best: null, keyD: 'kickgp.heaven.day.' + (T.day || ''), keyA: 'kickgp.heaven.all' };
-  const MEDALS = T.heaven ? [{ k: 'PLATINUM', t: T.L / 37, c: '#d8f4ff' }, { k: 'GOLD', t: T.L / 34, c: '#FFD24A' }, { k: 'SILVER', t: T.L / 31, c: '#DCE2EC' }, { k: 'BRONZE', t: T.L / 28, c: '#D8904E' }] : [];
+  const MEDALS = T.heaven && false ? [{ k: 'PLATINUM', t: T.L / 37, c: '#d8f4ff' }, { k: 'GOLD', t: T.L / 34, c: '#FFD24A' }, { k: 'SILVER', t: T.L / 31, c: '#DCE2EC' }, { k: 'BRONZE', t: T.L / 28, c: '#D8904E' }] : [];
   const medalOf = t => MEDALS.find(m => t <= m.t) || null;
   try { HV.best = JSON.parse(localStorage.getItem(HV.keyD) || 'null'); HV.all = JSON.parse(localStorage.getItem(HV.keyA) || 'null'); } catch (e) { }
   // 挑戦状（URL の # に入っている）
@@ -2224,14 +2225,16 @@ class KRoom {
   function heavenReset() { HV.next = 0; HV.cur = []; HV.rr = []; HV.acc = 0; VR.done = false; VR.blob = null; VR.on = false; const rv = rival(); if (rv) setTimeout(() => toast('CHALLENGE', 'y', `${esc(rv.name)}　${fmt(rv.t)}　に挑戦`, 2.4, true), 3600); else setTimeout(() => toast("TODAY'S SHRINE", 'c', `${T.day.slice(4, 6)}/${T.day.slice(6)}　${T.twist ? T.twist.jp : ''}`, 2.4, true), 3600); fetchWorld(); }
   function heavenCk(prevIdx) { if (!HV.cks.length || mode !== 'race' || HV.next >= HV.cks.length) return; const ck = HV.cks[HV.next], d0 = (prevIdx - ck.i + N) % N, d1 = (car.idx - ck.i + N) % N;
     if (!(d0 > N / 2 && d1 < N / 2)) return; HV.cur[HV.next] = raceT; const rv = rival(), ref = rv && rv.s && rv.s[HV.next] ? rv.s[HV.next] : HV.best && HV.best.s ? HV.best.s[HV.next] : null;
-    if (ref) { const dd = raceT - ref; toast(ck.n, dd <= 0 ? 'g' : 'r', `${fmtD(dd)}　${rv && rv.s && rv.s[HV.next] ? 'vs ' + esc(rv.name) : '自己ベスト'}`, 1.2, true); } else toast(ck.n, 'c', fmt(raceT), 1, true);
+    toastForce = true;
+    if (ref) { const dd = raceT - ref; toast(ck.n, dd <= 0 ? 'g' : 'r', `${fmtD(dd)}　${rv && rv.s && rv.s[HV.next] ? 'vs ' + esc(rv.name) : '自己ベスト'}`, 1.5, true); } else toast(ck.n, 'c', fmt(raceT), 1.2, true);
+    toastForce = false;
     if (ck.n === 'HEAVEN GATE') { } HV.next++; }
   function heavenFinish(t) { const md = medalOf(t), prevBest = HV.best ? HV.best.t : null; HV.run = { t, s: HV.cur.slice(), md: md ? md.k : null, rec: (HV.rr || []).slice() };
     if (!HV.best || t < HV.best.t) { HV.best = { t, s: HV.cur.slice() }; try { localStorage.setItem(HV.keyD, JSON.stringify(HV.best)); } catch (e) { } }
     if (!HV.all || t < HV.all.t) { HV.all = { t, md: md ? md.k : null }; try { localStorage.setItem(HV.keyA, JSON.stringify(HV.all)); } catch (e) { } }
     if (md) setTimeout(() => { flag(md.k, 2); }, 900); submitRun(t); }
   function heavenResult() { if (!T.heaven || !HV.run) return; const kv = $('#rKv'), r0 = HV.run, md = medalOf(r0.t), nx = MEDALS.slice().reverse().find(m => m.t < r0.t && (!md || m.t < md.t)) || (md ? MEDALS[MEDALS.indexOf(md) - 1] : MEDALS[MEDALS.length - 1]);
-    const rv = rival(); let h = `<dt>MEDAL</dt><dd style="color:${md ? md.c : '#A5B3C2'}">${md ? md.k : 'NONE'}</dd>`;
+    const rv = rival(); let h = (car.gain ? `<dt>TRICK GAIN</dt><dd style="color:${car.gain >= 0 ? '#6DF2BE' : '#FF735E'}">${car.gain >= 0 ? '+' : '−'}${Math.abs(car.gain).toFixed(2)}秒</dd>` : '');
     if (nx && (!md || nx !== md)) h += `<dt>NEXT</dt><dd class="jp" style="font-size:15px">${nx.k} まで ${(r0.t - nx.t).toFixed(2)}秒</dd>`;
     if (rv) h += `<dt>VS</dt><dd class="jp" style="font-size:15px">${esc(rv.name)} ${r0.t <= rv.t ? '<b style="color:#6DF2BE">勝ち</b>' : '<b style="color:#FF735E">あと ' + (r0.t - rv.t).toFixed(2) + '秒</b>'}</dd>`;
     h += `<dt>TODAY</dt><dd>${HV.best ? fmt(HV.best.t) : '-'}</dd>`; kv.insertAdjacentHTML('beforeend', h);
@@ -2277,8 +2280,9 @@ class KRoom {
     const a = pick(); todaySky = [a]; if (Math.random() < .1) { const b = pick(Math.random); if (b !== a) todaySky.push(b); } if (T.twist && T.twist.k === 'FULLMOON' && !todaySky.includes('meteor')) todaySky.push('meteor'); View.setSkyEvent(todaySky); }
   function skySeen(k) { const e = SKYDEX.find(o => o.k === k); if (!e) return; const isNew = !dex[k]; dex[k] = (dex[k] || 0) + 1; try { localStorage.setItem(dexKey, JSON.stringify(dex)); } catch (e2) {}
     const got = SKYDEX.filter(o => dex[o.k]).length; flag(e.en, 1.6); toast(isNew ? 'NEW SKY' : 'SKY', isNew ? 'y' : 'c', `${e.jp}　${'★'.repeat(e.r)}　図鑑 ${got}/${SKYDEX.length}`, 2.4, true); Snd.gate(); if (isNew) addStyle(800, false); }
+  let toastForce = false;
   const QUIET = /BOOST RING|CLEAN LANDING|OVERTAKE|UPDRAFT|BOUNCE|SAVE|WIRE|DIVE|CLOUD BREAK|NEAR|DRAFT|COMBO|PERFECT|FLOW|SLIPSTREAM|LINE|^\d+\s*m/;
-  function toast(html, cls, small, secs = 2.2, sm) { if (T.heaven && mode === 'race' && QUIET.test((String(html) + ' ' + (small || '')).replace(/<[^>]*>/g, '').trim())) return; secs = Math.min(secs, 1.2) * .8; el.toast.hidden = true; void el.toast.offsetWidth; el.toast.className = 'toast' + (sm ? ' sm' : ''); el.toast.innerHTML = `<div class="d num ${cls}">${html}</div>${small ? `<small>${small}</small>` : ''}`; el.toast.hidden = false; toastT = secs; }
+  function toast(html, cls, small, secs = 2.2, sm) { if (T.heaven && mode === 'race' && !toastForce && QUIET.test((String(html) + ' ' + (small || '')).replace(/<[^>]*>/g, '').trim())) return; secs = Math.min(secs, 1.2) * .8; el.toast.hidden = true; void el.toast.offsetWidth; el.toast.className = 'toast' + (sm ? ' sm' : ''); el.toast.innerHTML = `<div class="d num ${cls}">${html}</div>${small ? `<small>${small}</small>` : ''}`; el.toast.hidden = false; toastT = secs; }
   function flag(text, secs = 1.2) { el.flag.hidden = true; void el.flag.offsetWidth; el.flag.innerHTML = `<b>${text}</b>`; el.flag.hidden = false; flagT = secs; }
   function flash(a) { if (T.heaven) a *= .3; el.flash.style.transition = 'none'; el.flash.style.opacity = a; requestAnimationFrame(() => { el.flash.style.transition = 'opacity .6s ease-out'; el.flash.style.opacity = 0; }); }
 
@@ -2339,10 +2343,12 @@ class KRoom {
         const lv = flow >= 95 ? 4 : flow >= 70 ? 3 : flow >= 40 ? 2 : flow >= 15 ? 1 : 0; if (lv > flowLv && lv >= 2) { Snd.flowUp(lv); if (lv >= 4) toast('APEX', 'k', 'FLOW MAX', .8, true); } flowLv = lv; } }
     // 空中トリック（HEAVEN ASCENT）
     if (T.heaven && mode === 'race') { const P2 = R.player;
+      if (car.chainT > 0 && (car.chainT -= DT) <= 0) car.chain = 0;
+      if (car.air && inp.bst && car.vy < -2.4) car.vy += (-2.4 - car.vy) * .12;
       if (car.air && car.airT > .15) { if (Math.abs(inp.steer) > .5) car.spin = (car.spin || 0) + Math.sign(inp.steer) * 8.2 * DT; car.trick = true; }
       if (ev.land && car.trick) { const sp = Math.abs(car.spin || 0), n = Math.round(sp / (Math.PI * 2)), off = Math.abs(sp - n * Math.PI * 2);
-        if (n >= 1 && off < .95) { P2.kick = Math.max(P2.kick, .6 + .3 * n); P2.boost = Math.min(1, P2.boost + .18 * n); flow += 12 * n; st.tricks = (st.tricks || 0) + n; Snd.perfect(); flash(.2); buzz([15, 25, 15]); addStyle(450 * n); toast(n * 360 + '°', 'k', n >= 2 ? 'ダブルスピン！' : '空中で一回転', 1.1, true); }
-        else if (sp > .9) { car.v *= .8; car.wobble = .8; Snd.crash(6); toast('BAIL', 'r', '回りきれなかった', .9, true); }
+        if (n >= 1 && off < .95) { car.chain = (car.chain || 0) + 1; car.chainT = 6; const ch = Math.min(5, car.chain); P2.kick = Math.max(P2.kick, (.6 + .3 * n) * (1 + .3 * (ch - 1))); car.v = Math.min(car.v * (1.04 + .02 * ch), 75); P2.boost = Math.min(1, P2.boost + .18 * n); flow += 12 * n; st.tricks = (st.tricks || 0) + n; Snd.perfect(); flash(.2); buzz([15, 25, 15]); addStyle(450 * n); const gain = (.25 + .15 * n) * (1 + .3 * (ch - 1)); car.gain = (car.gain || 0) + gain; toast(n * 360 + '°' + (car.chain >= 2 ? ' ×' + car.chain : ''), 'g', `+${gain.toFixed(2)}秒　` + (car.chain >= 2 ? car.chain + '連続' : n >= 2 ? 'ダブルスピン' : '一回転'), 1.3, true); }
+        else if (sp > .9) { car.chain = 0; car.v *= .8; car.wobble = .8; Snd.crash(6); car.gain = (car.gain || 0) - .6; toast('BAIL', 'r', '−0.60秒　回りきれなかった', 1.1, true); }
         car.spin = 0; car.trick = false; }
       if (!car.air && !ev.land) { car.spin = 0; car.trick = false; } }
     if (ev.block) { flow = Math.max(0, flow - 25); Snd.crash(14); View.shake(1); flash(.25); buzz([50, 30, 50]); toast('HIT', 'r', '', .7, true); }
@@ -2400,7 +2406,7 @@ class KRoom {
       R.cars.forEach((c, i) => { const ds = wrapN(car.idx - c.fi), sgn = ds >= 0 ? 1 : -1; if (carSide[i] === -1 && sgn === 1 && Math.abs(ds) < 6 && car.v - c.v > 3) Snd.whoosh(Math.abs(car.d - c.d)); carSide[i] = sgn; });
       if (race) { if (comboT > 0 && (comboT -= dt) <= 0) combo = 0; if (P.slip && mode === 'race') { draftAcc += dt; if (draftAcc > .5) { draftAcc = 0; addStyle(30, false); } }
         el.styleN.textContent = style.toLocaleString('en-US'); el.comboN.textContent = combo > 1 ? '×' + combo : ''; el.comboBar.style.width = (combo > 0 ? clamp(comboT / 5, 0, 1) * 100 : 0) + '%';
-        if (T.heaven && mode !== 'count') { if (!$('#hint').hidden) $('#hint').hidden = true; } else if (save.races < 3) { hintT += dt; const h = mode === 'count' ? '左親指で左右に曲がる。アクセルは自動。GOの瞬間に BOOST でロケットスタート' : hintT < 10 ? '光るラインの上を走ると FLOW がたまる' : hintT < 20 ? 'カーブの手前で大きく倒すと DRIFT。戻した瞬間に加速' : hintT < 29 ? '速度を落とさずラインに戻せば PERFECT DRIFT' : hintT < 37 ? 'FLOW が高いほど BOOST が強くなる' : ''; if (el.hint.dataset.h !== h) { el.hint.dataset.h = h; el.hint.textContent = h; } el.hint.hidden = !h || mode === 'finish'; } }
+        if (T.heaven && mode !== 'count') { if (!$('#hint').hidden) $('#hint').hidden = true; } else if (save.races < 3) { hintT += dt; const h = mode === 'count' ? (T.heaven ? 'ジャンプ台で飛んだら、左右に倒し続けて回転。きれいに着地すると加速。空中で BOOST 長押しで滑空' : '左親指で左右に曲がる。アクセルは自動。GOの瞬間に BOOST でロケットスタート') : hintT < 10 ? '光るラインの上を走ると FLOW がたまる' : hintT < 20 ? 'カーブの手前で大きく倒すと DRIFT。戻した瞬間に加速' : hintT < 29 ? '速度を落とさずラインに戻せば PERFECT DRIFT' : hintT < 37 ? 'FLOW が高いほど BOOST が強くなる' : ''; if (el.hint.dataset.h !== h) { el.hint.dataset.h = h; el.hint.textContent = h; } el.hint.hidden = !h || mode === 'finish'; } }
       { const ve = View.popEvent(); if (ve === 'whale') { toast('WHALE', 'c', '', .9, true); Snd.whale(); buzz([20, 40, 20]); addStyle(300, false); } else if (ve === 'cloud') { toast('CLOUD BREAK', 'c', '雲を突き抜けた', 1.0, true); Snd.cloud(); View.shake(.55); buzz([15, 30, 15]); addStyle(200, false); } else if (ve && ve.startsWith('sky:')) { skySeen(ve.slice(4)); } else if (ve === 'gate') { toast('HEAVEN GATE', 'y', '天の門', 2.0, true); Snd.gate(); Snd.heavenDuck(1.6); flash(.75); buzz([30, 60, 30, 60, 90]); addStyle(500, false); ts = .3; tsT = 1.5; } }
       flowFill.style.width = flow.toFixed(0) + '%'; flowLab.textContent = ['CRUISE', 'LEAN', 'FLOW', 'FLOW ++', 'APEX'][flowLv]; flowBox.className = 'lv' + flowLv; flowBox.hidden = !race;
       if (bst && !wasBoost) { Snd.boostOn(); buzz(20); } wasBoost = !!bst; el.bfx.style.opacity = bst ? 1 : 0;
