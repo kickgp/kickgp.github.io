@@ -386,6 +386,10 @@ button[disabled]{opacity:.4}
 </head>
 <body>
 <div id="app">
+<div id="errBadge" style="position:fixed;right:4px;bottom:2px;z-index:99;max-width:60vw;font:10px/1.3 monospace;color:#ff6b6b;background:rgba(0,0,0,.55);padding:2px 5px;pointer-events:none;white-space:pre-wrap" hidden></div>
+<script>(function () { var n = 0, el = null; function show(m) { if (n++ > 3) return; el = el || document.getElementById('errBadge'); if (!el) return; el.hidden = false; el.textContent += (el.textContent ? '\n' : '') + 'ERR ' + String(m).replace(/\s+/g, ' ').slice(0, 140); }
+  var ce = console.error; console.error = function () { try { show([].slice.call(arguments).join(' ')); } catch (e) { } return ce.apply(console, arguments); };
+  addEventListener('error', function (e) { show(e.message || e); }); addEventListener('unhandledrejection', function (e) { show(e.reason && e.reason.message || e.reason); }); })();</script>
   <canvas id="gl" aria-label="レース画面"></canvas>
   <div id="vig"></div><div id="boostfx"></div><div id="flash"></div>
 
@@ -926,7 +930,7 @@ const View = (() => {
   let rt, vcam, composer, bloom; const hideInRefl = []; const texM = new THREE.Matrix4(); const clipPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   const roadU = () => ({ map: { value: null }, tRefl: { value: null }, texM: { value: texM }, fogColor: { value: new THREE.Color(C.fog) }, fogDensity: { value: .003 }, uWet: { value: .55 }, uTint: { value: new THREE.Color(1, 1, 1) }, uRefl: { value: 1 } });
   const ROAD_VS = `varying vec2 vUv; varying vec4 vProj; varying vec3 vW; uniform mat4 texM; void main(){ vUv=uv; vec4 wp=modelMatrix*vec4(position,1.0); vW=wp.xyz; vProj=texM*wp; gl_Position=projectionMatrix*viewMatrix*wp; }`;
-  const ROAD_FS = `precision mediump float; varying vec2 vUv; varying vec4 vProj; varying vec3 vW; uniform sampler2D map; uniform sampler2D tRefl; uniform vec3 fogColor; uniform float fogDensity; uniform float uWet; uniform vec3 uTint; uniform float uRefl;
+  const ROAD_FS = `precision highp float; varying vec2 vUv; varying vec4 vProj; varying vec3 vW; uniform sampler2D map; uniform sampler2D tRefl; uniform vec3 fogColor; uniform float fogDensity; uniform float uWet; uniform vec3 uTint; uniform float uRefl;
     void main(){ vec3 base=texture2D(map,vUv).rgb*uTint; float g=texture2D(map,vUv*vec2(2.7,1.9)+0.31).r; vec2 uv=vProj.xy/max(vProj.w,0.0001); uv+= (g-0.08)*vec2(0.035,0.05);
       vec3 r=texture2D(tRefl,uv).rgb*0.34+texture2D(tRefl,uv+vec2(0.0,0.018)).rgb*0.26+texture2D(tRefl,uv+vec2(0.0,0.04)).rgb*0.2+texture2D(tRefl,uv-vec2(0.0,0.02)).rgb*0.2;
       vec3 V=normalize(cameraPosition-vW); float fres=pow(1.0-clamp(V.y,0.0,1.0),2.6); float lines=smoothstep(0.38,0.6,base.r);
@@ -1279,7 +1283,7 @@ const View = (() => {
         col+=(vec3(0.75,0.9,1.0)*head*4.0+vec3(0.45,0.65,1.0)*tail*2.3+vec3(1.0,0.6,0.85)*tail2*1.4)*uComet; }
       return col; }`;
   const HSKY_FS = SKY_COMMON + `
-    void main(){ gl_FragColor=vec4(skyCol(normalize(vW-cameraPosition),1.0),1.0); }`;
+    void main(){ vec3 sc0=skyCol(normalize(vW-cameraPosition),1.0); gl_FragColor=vec4(clamp(sc0,0.0,48.0),1.0); }`;
   const heavenSkyU = () => ({ uZen: { value: new THREE.Color() }, uMid: { value: new THREE.Color() }, uHor: { value: new THREE.Color() }, uBelow: { value: new THREE.Color() }, uSun: { value: new THREE.Color() }, uSunDir: { value: new THREE.Vector3(0, .5, -1) },
     uCloudLit: { value: new THREE.Color(1, 1, 1) }, uCloudShade: { value: new THREE.Color(.5, .6, .9) }, uCover: { value: .45 }, uStars: { value: 0 }, uTime: { value: 0 }, uRainbow: { value: 0 }, uAurora: { value: 0 }, uComet: { value: 0 }, uRbDir: { value: new THREE.Vector3(0, -.1, -1) }, uCometDir: { value: new THREE.Vector3(0, .6, -1) }, uMoonDir: { value: new THREE.Vector3(.3, .35, -.9).normalize() }, uExposure: { value: .62 }, uGalN: { value: new THREE.Vector3(.35, .55, -.76).normalize() }, uGalC: { value: new THREE.Vector3(.62, .2, .76).normalize() }, uVolQ: { value: 1 }, uLite: { value: LITE ? 1 : 0 } });
   // 時間帯（コースの進み具合 0→1 で、1周＝1日）
@@ -1366,7 +1370,7 @@ const View = (() => {
   }
   const SHINKAI_FS = `uniform sampler2D tDiffuse; uniform vec2 uSun; uniform float uSunOn; uniform float uRay; uniform float uWhite; uniform float uAspect; uniform vec3 uSunCol; uniform float uNight; varying vec2 vUv;
     void main(){ vec2 uv=vUv; vec2 dc=uv-0.5; float r2=dot(dc,dc); vec2 ca=dc*0.006*r2;
-      vec3 col=vec3(texture2D(tDiffuse,uv+ca).r, texture2D(tDiffuse,uv).g, texture2D(tDiffuse,uv-ca).b);
+      vec3 col=clamp(vec3(texture2D(tDiffuse,uv+ca).r, texture2D(tDiffuse,uv).g, texture2D(tDiffuse,uv-ca).b),0.0,48.0);
       if(uSunOn>0.001){ vec2 dir=(uv-uSun)/${LITE ? '18.0' : '36.0'}; vec2 sp=uv; float il=1.0; vec3 acc=vec3(0.0);
         for(int i=0;i<${LITE ? 18 : 36};i++){ sp-=dir; vec3 sm=texture2D(tDiffuse,sp).rgb; float l=max(0.0,dot(sm,vec3(0.299,0.587,0.114))-0.7); acc+=sm*l*il; il*=${LITE ? '0.91' : '0.955'}; }
         col+=acc*uSunCol*uRay*uSunOn*0.085;
