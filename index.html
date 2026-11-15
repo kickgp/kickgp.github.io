@@ -224,6 +224,7 @@ button:focus-visible{outline:2px solid var(--amber);outline-offset:3px}
 .h-style b{display:block;font-size:clamp(20px,6vh,30px);line-height:1}
 .h-style em{display:block;font-size:clamp(16px,4.6vh,22px);color:var(--cyan);line-height:1.1;min-height:1.1em}
 .h-style i{position:absolute;right:0;bottom:0;height:3px;width:0;background:var(--cyan)}
+@media (pointer:coarse){.hint{font-size:11px!important;padding:4px 10px!important;bottom:auto!important;top:44%!important;left:auto!important;right:var(--sr)!important;transform:none!important;text-align:right!important;max-width:min(34vw,300px)!important;border-left:0!important;border-right:3px solid var(--cyan)!important;opacity:.85}}
 .hint{position:absolute;left:50%;bottom:calc(clamp(110px,34vh,150px) + env(safe-area-inset-bottom,0px));transform:translateX(-50%);padding:8px 14px;font-size:13px;font-weight:700;line-height:1.5;text-align:center;max-width:min(92vw,560px);border-left:3px solid var(--cyan)}
 .toast .d.k{color:#ff5ac8}
 .sharebox{position:absolute;inset:0;background:rgba(0,0,0,.88);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;gap:10px;cursor:pointer;z-index:9}
@@ -733,9 +734,10 @@ const KGP = (() => {
     const hx = Math.sin(c.yaw), hz = -Math.cos(c.yaw); c.x += hx * c.v * DT; c.z += hz * c.v * DT; c.dist += c.v * DT;
     // --- walls
     const l2 = locate(T, c.x, c.z, c.idx); const lim = T.halfW - 0.45;
-    if (Math.abs(l2.d) > lim && !(c.noRail && T.isOpen && T.isOpen(l2.i))) { const p = T.S[l2.i], side = Math.sign(l2.d), pen = Math.abs(l2.d) - lim; c.x -= p.nx * side * pen; c.z -= p.nz * side * pen;
+    if (Math.abs(l2.d) > lim && !(c.noRail && T.isOpen && T.isOpen(l2.i) && !T.assist)) { const p = T.S[l2.i], side = Math.sign(l2.d), pen = Math.abs(l2.d) - lim; c.x -= p.nx * side * pen; c.z -= p.nz * side * pen;
       const tyaw = Math.atan2(p.tx, -p.tz), da = angDiff(c.yaw, tyaw), into = Math.sin(da) * side; // >0: heading into the wall
       if (into > 0) { const loss = clamp(U.wallLoss * (c.hit > 0 ? .15 : 1) + U.wallAngleLoss * into, 0, .85); if (c.hit <= 0 && c.v > 3) ev.wall = c.v * (0.3 + into); c.v *= 1 - loss * (c.hit > 0 ? .25 : 1); c.yaw = tyaw + da * 0.35 - side * 0.04; c.lean *= .5; c.hit = .35; } }
+    if (T.assist) { const pq = T.S[c.idx], ty = Math.atan2(pq.tx, -pq.tz), dd = angDiff(c.yaw, ty), mx = .55; if (Math.abs(dd) > mx) c.yaw = ty + Math.sign(dd) * (mx + (Math.abs(dd) - mx) * .9); }
     if (c.hit > 0) c.hit -= DT; if (c.wobble > 0) c.wobble -= DT; if (c.land > 0) c.land -= DT;
     // --- vertical: stick to the ground unless it falls away faster than gravity
     const l3 = locate(T, c.x, c.z, l2.i); c.idx = l3.i; c.d = l3.d; const gy = groundAt(T, l3.fi, l3.d);
@@ -820,11 +822,12 @@ KGP.Race = (() => {
       const fm = r.flowMul || 1; const sm = T.speedMul || 1; c.mV = (r.boosting ? BOOST.vmax * fm : kk ? BOOST.kickV : 1) * (1 + (fm - 1) * .3) * sm; c.mA = (r.boosting ? BOOST.acc : kk ? BOOST.kickA : 1) * sm; c.mD = (r.slip ? BOOST.slipDrag : 1) / (sm * sm);
       if (r.isPlayer) c.noRail = true;
       const ev = KGP.step(T, c, inp); if (ev.wall > 21 && r.inv <= 0 && !hold) wipe(r, out, 'WALL');
-      if (!hold && !c.air && r.isPlayer && T.isOpen && T.isOpen(c.idx) && Math.abs(c.d) > T.halfW + .25) { const nc = KGP.spawn(T, (c.idx + 6) % N, 0); nc.v = Math.max(10, c.v * .5); nc.dist = c.dist; nc.noRail = true; Object.assign(c, nc); r.inv = 1.2; r.boost = Math.max(0, r.boost - .3); if (r.isPlayer) out.fall = true; }
+      if (!hold && !c.air && r.isPlayer && !T.assist && T.isOpen && T.isOpen(c.idx) && Math.abs(c.d) > T.halfW + .25) { const nc = KGP.spawn(T, (c.idx + 6) % N, 0); nc.v = Math.max(10, c.v * .5); nc.dist = c.dist; nc.noRail = true; Object.assign(c, nc); r.inv = 1.2; r.boost = Math.max(0, r.boost - .3); if (r.isPlayer) out.fall = true; }
       if (!hold && r.isPlayer && T.blocks.length && !c.air && !(r.inv > 0)) for (const b of T.blocks) { const bd = b.amp * Math.sin(R.t * b.w + b.ph), a = wrap(prevIdx - b.i, N), bb = wrap(c.idx - b.i, N); if (a <= 0 && bb >= 0 && Math.abs(c.d - bd) < 1.15) { c.v *= .5; r.boost = Math.max(0, r.boost - .25); r.inv = .9; out.block = true; } }
       if (!hold && !c.air && T.inDiv && T.inDiv(c.idx) && Math.abs(c.d) < .5) { const sg = Math.sign(c.d) || 1, p = T.S[c.idx]; c.x += p.nx * sg * (.5 - Math.abs(c.d)); c.z += p.nz * sg * (.5 - Math.abs(c.d)); c.d = sg * .5; c.v *= .985; if (r.isPlayer) out.scrape = true; }
       if (!hold && T.pads.length && !c.air) for (const g of T.pads) { const a = wrap(prevIdx - g.i, N), b = wrap(c.idx - g.i, N); if (a < 0 && b >= 0 && Math.abs(c.d - g.d) < 1.3) { r.kick = Math.max(r.kick, .9); r.boost = Math.min(1, r.boost + .08); if (r.isPlayer) out.pad = true; } }
-      if (T.gaps && !c.air && !hold) for (const gp of T.gaps) { const a = (c.idx - gp.i0 + N) % N, len = (gp.i1 - gp.i0 + N) % N; if (a <= len) { if (gp.wire && (Math.abs(c.d - gp.d) < .8 || !r.isPlayer)) { r.kick = Math.max(r.kick, .45); if (r.isPlayer) out.wire = true; continue; } const ni = (gp.i1 + 4) % N, nc = KGP.spawn(T, ni, clamp(c.d, -1.5, 1.5)); nc.v = Math.max(9, c.v * .45); nc.dist = c.dist; Object.assign(c, nc); r.inv = 1.4; r.boost = Math.max(0, r.boost - .3); if (r.isPlayer) out.fall = true; break; } }
+      if (T.gaps && !c.air && !hold) for (const gp of T.gaps) { const a = (c.idx - gp.i0 + N) % N, len = (gp.i1 - gp.i0 + N) % N; if (a <= len) { if (gp.wire && (Math.abs(c.d - gp.d) < (T.assist ? T.halfW + .6 : .8) || !r.isPlayer)) { r.kick = Math.max(r.kick, .45); if (r.isPlayer) out.wire = true; continue; } if (T.assist && r.isPlayer) { c.vy = Math.max(c.vy, 9.5); c.y += .3; c.air = true; c.v = Math.max(c.v, 24); r.kick = Math.max(r.kick, .5); out.save = true; break; }
+        const ni = (gp.i1 + 4) % N, nc = KGP.spawn(T, ni, clamp(c.d, -1.5, 1.5)); nc.v = Math.max(9, c.v * .45); nc.dist = c.dist; Object.assign(c, nc); r.inv = 1.4; r.boost = Math.max(0, r.boost - .3); if (r.isPlayer) out.fall = true; break; } }
       if (ev.drift) { const lv = ev.drift > 2.2 ? 3 : ev.drift > 1.2 ? 2 : 1; r.kick = .45 + lv * .4; r.boost = Math.min(1, r.boost + .05 * lv); ev.drift = { t: ev.drift, lv }; } r.w = inp.weight; if (r.hitT > 0) r.hitT -= DT; r.top = Math.max(r.top, c.v);
       if (ev.land && ev.land.soft && ev.land.airT > .4) r.boost = Math.min(1, r.boost + BOOST.land);
       // boost rings: fly through one and it kicks you forward
@@ -1223,7 +1226,7 @@ const View = (() => {
       dd-=(n3(p*0.0065+vec3(uTime*0.03,0.0,0.0))*0.65+n3(p*0.019)*0.35*gDet-0.5)*0.6*(1.0-hf*0.4)*(0.35+0.65*gDet); return clamp(dd*1.9,0.0,1.0); }
     vec3 vol(vec3 ro, vec3 d, vec3 col, vec3 Ld, vec3 Lc, vec3 amb, float q){
       if(d.y<0.012) return col; float t0=max(0.0,(150.0-ro.y)/d.y), t1=min((1500.0-ro.y)/d.y,t0+8000.0); if(t1<=t0) return col;
-      float N=q>0.5?(uLite>0.5?36.0:64.0):8.0; float sl=(t1-t0)/N; float t=t0+sl*(0.5+0.35*(h1(floor(gl_FragCoord.xy*0.5))-0.5)); vec3 acc=vec3(0.0); float T=1.0;
+      float N=q>0.5?(uLite>0.5?26.0:64.0):8.0; float sl=(t1-t0)/N; float t=t0+sl*(0.5+0.35*(h1(floor(gl_FragCoord.xy*0.5))-0.5)); vec3 acc=vec3(0.0); float T=1.0;
       float mu=dot(d,Ld); float hg=0.07957747*(1.0-0.36)/pow(1.0+0.36-1.2*mu,1.5); float ph=mix(0.07957747,hg,0.75)*12.0;
       for(int i=0;i<64;i++){ if(float(i)>=N || T<0.02) break; vec3 p=ro+d*t; gDet=exp(-t/2600.0); float dn=cloudD(p);
         if(dn>0.01){ float od=0.0; if(q>0.5){ for(int j=1;j<=3;j++) od+=cloudD(p+Ld*float(j)*110.0); } else od=1.2;
@@ -1364,8 +1367,8 @@ const View = (() => {
   const SHINKAI_FS = `uniform sampler2D tDiffuse; uniform vec2 uSun; uniform float uSunOn; uniform float uRay; uniform float uWhite; uniform float uAspect; uniform vec3 uSunCol; uniform float uNight; varying vec2 vUv;
     void main(){ vec2 uv=vUv; vec2 dc=uv-0.5; float r2=dot(dc,dc); vec2 ca=dc*0.006*r2;
       vec3 col=vec3(texture2D(tDiffuse,uv+ca).r, texture2D(tDiffuse,uv).g, texture2D(tDiffuse,uv-ca).b);
-      if(uSunOn>0.001){ vec2 dir=(uv-uSun)/36.0; vec2 sp=uv; float il=1.0; vec3 acc=vec3(0.0);
-        for(int i=0;i<36;i++){ sp-=dir; vec3 sm=texture2D(tDiffuse,sp).rgb; float l=max(0.0,dot(sm,vec3(0.299,0.587,0.114))-0.7); acc+=sm*l*il; il*=0.955; }
+      if(uSunOn>0.001){ vec2 dir=(uv-uSun)/${LITE ? '18.0' : '36.0'}; vec2 sp=uv; float il=1.0; vec3 acc=vec3(0.0);
+        for(int i=0;i<${LITE ? 18 : 36};i++){ sp-=dir; vec3 sm=texture2D(tDiffuse,sp).rgb; float l=max(0.0,dot(sm,vec3(0.299,0.587,0.114))-0.7); acc+=sm*l*il; il*=${LITE ? '0.91' : '0.955'}; }
         col+=acc*uSunCol*uRay*uSunOn*0.085;
         vec2 sv=uSun-0.5; for(int k=0;k<7;k++){ float fk=float(k); float sc=-0.6+fk*0.33; vec2 gp=0.5-sv*sc; vec2 dd=(uv-gp)*vec2(uAspect,1.0); float rr=0.025+0.018*fract(fk*0.618)*3.0; float ang=atan(dd.y,dd.x); float hexr=rr*(0.92+0.08*cos(6.0*ang)); float g=smoothstep(hexr,hexr*0.6,length(dd))*0.6+smoothstep(hexr*1.05,hexr,length(dd))*0.4;
           vec3 tint=fk<2.0?vec3(0.4,1.0,0.8):fk<4.0?vec3(1.0,0.5,0.9):vec3(0.5,0.8,1.0); col+=g*uSunOn*0.06*tint; }
@@ -1927,7 +1930,8 @@ class KRoom {
     document.addEventListener('touchstart', e => { const x = e.touches[0] ? e.touches[0].clientX : -1; if ((x >= 0 && x < 28) || x > innerWidth - 28) { if (!(e.target.closest && e.target.closest('button,input'))) e.preventDefault(); } }, { passive: false });
     try { history.pushState({ kgp: 1 }, ''); addEventListener('popstate', () => { try { history.pushState({ kgp: 1 }, ''); } catch (e) { } try { pause(); } catch (e) { } }); } catch (e) { }
   }
-  const cv = $('#gl'); View.init(cv, T, window.__KGP_GL);
+  if (coarse && T.heaven) T.assist = true;
+  const cv = $('#gl'); View.init(cv, T, window.__KGP_GL); if (coarse) { const sh0 = View.shake; View.shake = k => sh0(k * .3); }
   // 画面の処理が限界を超えて描画が止まったら、解像度を下げて読み込み直す
   cv.addEventListener('webglcontextlost', e => { e.preventDefault(); try { localStorage.setItem('kickgp.rs', Math.max(.5, (RS || 1) - .25)); } catch (_) { } setTimeout(() => location.reload(), 400); });
   try { const M = window.KGP_MODELS; if (M && THREE.GLTFLoader) for (const name of Object.keys(M)) { const bin = atob(M[name]), buf = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
@@ -2326,6 +2330,7 @@ class KRoom {
     if (ev.block) { flow = Math.max(0, flow - 25); Snd.crash(14); View.shake(1); flash(.25); buzz([50, 30, 50]); toast('HIT', 'r', '', .7, true); }
     if (ev.pad) { Snd.boostOn(); View.shake(.15); addStyle(120); }
     if (ev.scrape && Math.random() < .08) Snd.crash(3);
+    if (ev.save) { buzz(20); toast('SAVE', 'c', '裂け目を自動で越えた', .8, true); }
     if (ev.fall) { flow = Math.max(0, flow - 30); Snd.crash(10); View.shake(.8); buzz([60, 30, 60]); toast('FALL', 'r', '谷に落ちた。BOOSTで跳べ', 1.4, true); }
     if (ev.lift === 'spout') { toast('WHALE SPOUT', 'y', '鯨の潮吹きで空へ', 1.2, true); Snd.whale(); View.shake(.7); buzz([30, 40, 30]); addStyle(400, false); ev.lift = null; }
     if (ev.wire) { if (!wireOn) { wireOn = true; toast('WIRE', 'k', '綱渡り', .9, true); Snd.ring(); } if (Math.random() < .5) View.hitSparks(car, 3); addStyle(6, false); flow += 4 * DT; } else wireOn = false;
