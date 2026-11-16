@@ -640,7 +640,7 @@ const KGP = (() => {
           T.rings = T.rings.filter(r => !inR2(r.i, at(.36), at(.375)) && !inR2(r.i, at(.61), at(.62)));
           if (T.glass) for (const p of T.pads) if (inR2(p.i, T.glass.i0, T.glass.i1)) p.d = -1.75;
           // 序盤から「落ちる→浮く」：小さな落下を2か所
-          for (const [f0, L, D] of [[.09, 92, 9], [.29, 106, 12]]) { const i0 = at(f0); for (let k = 0; k <= L; k++) { const i = (i0 + k) % N, sn = Math.sin(Math.PI * k / L); S[i].y -= D * sn * sn; } }
+          for (const [f0, L, D] of [[.09, 110, 26], [.29, 120, 32], [.465, 120, 30]]) { const i0 = at(f0); for (let k = 0; k <= L; k++) { const i = (i0 + k) % N, sn = Math.sin(Math.PI * k / L); S[i].y -= D * sn * sn; } }
           for (let i = 0; i < N; i++) S[i].slope = (S[(i + 1) % N].y - S[(i + N - 1) % N].y) / (2 * T.ds);
           const CKN = ['UPDRAFT', 'DIP', 'STARS', 'BIG UPDRAFT', 'HEAVEN GATE', 'THE WALL', 'AIRTIME', 'FINAL'];
           if (T.ckpts) T.ckpts.forEach((c, k) => { if (CKN[k]) c.n = CKN[k]; }); }
@@ -784,7 +784,7 @@ const KGP = (() => {
     const hx = Math.sin(c.yaw), hz = -Math.cos(c.yaw); c.x += hx * c.v * DT; c.z += hz * c.v * DT; c.dist += c.v * DT;
     // --- walls
     const l2 = locate(T, c.x, c.z, c.idx); const lim = T.halfW - 0.45;
-    if (Math.abs(l2.d) > lim && !(c.noRail && T.isOpen && T.isOpen(l2.i) && !T.assist)) { const p = T.S[l2.i], side = Math.sign(l2.d), pen = Math.abs(l2.d) - lim; c.x -= p.nx * side * pen; c.z -= p.nz * side * pen;
+    if (Math.abs(l2.d) > lim && !(c.noRail && T.isOpen && T.isOpen(l2.i) && !T.assist && !T.heaven)) { const p = T.S[l2.i], side = Math.sign(l2.d), pen = Math.abs(l2.d) - lim; c.x -= p.nx * side * pen; c.z -= p.nz * side * pen;
       const tyaw = Math.atan2(p.tx, -p.tz), da = angDiff(c.yaw, tyaw), into = Math.sin(da) * side; // >0: heading into the wall
       if (into > 0) { const loss = clamp(U.wallLoss * (c.hit > 0 ? .15 : 1) + U.wallAngleLoss * into, 0, .85); if (c.hit <= 0 && c.v > 3) ev.wall = c.v * (0.3 + into); c.v *= 1 - loss * (c.hit > 0 ? .25 : 1); c.yaw = tyaw + da * 0.35 - side * 0.04; c.lean *= .5; c.hit = .35; } }
     if (T.lift && !c.air) { const la = (c.idx - T.lift.i0 + T.N) % T.N; c.onLift = la < T.lift.len; if (c.onLift) c.v += (T.lift.v - c.v) * .06; } else c.onLift = false;
@@ -877,12 +877,12 @@ KGP.Race = (() => {
       if (r.kick > 0) r.kick -= DT; const kk = r.kick > 0;
       const fm = r.flowMul || 1; const sm = T.speedMul || 1; c.mV = (r.boosting ? BOOST.vmax * fm : kk ? BOOST.kickV : 1) * (1 + (fm - 1) * .3) * sm * (r.ai && R.T.heaven ? 1.0 : 1); c.mA = (r.boosting ? BOOST.acc : kk ? BOOST.kickA : 1) * sm; c.mD = (r.slip ? BOOST.slipDrag : 1) / (sm * sm);
       if (r.isPlayer) c.noRail = true;
-      const ev = KGP.step(T, c, inp); if (ev.wall > 21 && r.inv <= 0 && !hold) wipe(r, out, 'WALL');
-      if (!hold && !c.air && r.isPlayer && !T.assist && T.isOpen && T.isOpen(c.idx) && Math.abs(c.d) > T.halfW + .25) { const nc = KGP.spawn(T, (c.idx + 6) % N, 0); nc.v = Math.max(10, c.v * .5); nc.dist = c.dist; nc.noRail = true; Object.assign(c, nc); r.inv = 1.2; r.boost = Math.max(0, r.boost - .3); if (r.isPlayer) out.fall = true; }
+      const ev = KGP.step(T, c, inp); if (ev.wall > 21 && r.inv <= 0 && !hold && !T.heaven) wipe(r, out, 'WALL');
+      if (!hold && !c.air && r.isPlayer && !T.assist && !T.heaven && T.isOpen && T.isOpen(c.idx) && Math.abs(c.d) > T.halfW + .25) { const nc = KGP.spawn(T, (c.idx + 6) % N, 0); nc.v = Math.max(10, c.v * .5); nc.dist = c.dist; nc.noRail = true; Object.assign(c, nc); r.inv = 1.2; r.boost = Math.max(0, r.boost - .3); if (r.isPlayer) out.fall = true; }
       if (!hold && r.isPlayer && T.blocks.length && !c.air && !(r.inv > 0)) for (const b of T.blocks) { const bd = b.amp * Math.sin(R.t * b.w + b.ph), a = wrap(prevIdx - b.i, N), bb = wrap(c.idx - b.i, N); if (a <= 0 && bb >= 0 && Math.abs(c.d - bd) < 1.15) { c.v *= .5; r.boost = Math.max(0, r.boost - .25); r.inv = .9; out.block = true; } }
       if (!hold && !c.air && T.inDiv && T.inDiv(c.idx) && Math.abs(c.d) < .5) { const sg = Math.sign(c.d) || 1, p = T.S[c.idx]; c.x += p.nx * sg * (.5 - Math.abs(c.d)); c.z += p.nz * sg * (.5 - Math.abs(c.d)); c.d = sg * .5; c.v *= T.heaven ? .997 : .985; if (T.heaven) { const ty = Math.atan2(p.tx, -p.tz); c.yaw = ty + angDiff(c.yaw, ty) * .5; } if (r.isPlayer) out.scrape = true; }
       if (!hold && T.pads.length && !c.air) for (const g of T.pads) { const a = wrap(prevIdx - g.i, N), b = wrap(c.idx - g.i, N); if (a < 0 && b >= 0 && Math.abs(c.d - g.d) < 1.3) { r.kick = Math.max(r.kick, .9); r.boost = Math.min(1, r.boost + .08); if (r.isPlayer) out.pad = true; } }
-      if (T.gaps && !c.air && !hold) for (const gp of T.gaps) { const a = (c.idx - gp.i0 + N) % N, len = (gp.i1 - gp.i0 + N) % N; if (a <= len) { if (gp.wire && (Math.abs(c.d - gp.d) < (T.assist ? T.halfW + .6 : .8) || !r.isPlayer)) { r.kick = Math.max(r.kick, .45); if (r.isPlayer) out.wire = true; continue; } if (T.assist && r.isPlayer) { c.vy = Math.max(c.vy, 9.5); c.y += .3; c.air = true; c.v = Math.max(c.v, 24); r.kick = Math.max(r.kick, .5); out.save = true; break; }
+      if (T.gaps && !c.air && !hold) for (const gp of T.gaps) { const a = (c.idx - gp.i0 + N) % N, len = (gp.i1 - gp.i0 + N) % N; if (a <= len) { if (gp.wire && (Math.abs(c.d - gp.d) < (T.assist ? T.halfW + .6 : .8) || !r.isPlayer)) { r.kick = Math.max(r.kick, .45); if (r.isPlayer) out.wire = true; continue; } if ((T.assist || T.heaven) && r.isPlayer) { c.vy = Math.max(c.vy, 9.5); c.y += .3; c.air = true; c.v = Math.max(c.v, 24); r.kick = Math.max(r.kick, .5); out.save = true; break; }
         const ni = (gp.i1 + 4) % N, nc = KGP.spawn(T, ni, clamp(c.d, -1.5, 1.5)); nc.v = Math.max(9, c.v * .45); nc.dist = c.dist; Object.assign(c, nc); r.inv = 1.4; r.boost = Math.max(0, r.boost - .3); if (r.isPlayer) out.fall = true; break; } }
       if (ev.drift) { const lv = ev.drift > 2.2 ? 3 : ev.drift > 1.2 ? 2 : 1; r.kick = .45 + lv * .4; r.boost = Math.min(1, r.boost + .05 * lv); ev.drift = { t: ev.drift, lv }; } r.w = inp.weight; if (r.hitT > 0) r.hitT -= DT; r.top = Math.max(r.top, c.v);
       if (ev.land && ev.land.soft && ev.land.airT > .4) r.boost = Math.min(1, r.boost + BOOST.land);
@@ -2486,7 +2486,7 @@ class KRoom {
 
   let last = 0, fAcc = 0, fN = 0;
   function frame(now) {
-    const rdt = Math.min(.05, last ? (now - last) / 1000 : 0); const rawDt = last ? (now - last) / 1000 : 0; last = now; if (tsT > 0 && (tsT -= rdt) <= 0) ts = 1; const dt = rdt * ts; simT += rdt; readInput(rdt);
+    const rdt = Math.min(.05, last ? (now - last) / 1000 : 0); const rawDt = last ? (now - last) / 1000 : 0; last = now; if (tsT > 0 && (tsT -= rdt) <= 0) ts = 1; const dt = rdt * (T.heaven ? 1 : ts); simT += rdt; readInput(rdt);
     if (inp.boost && !prevThr && mode === 'race' && goT != null && !rocket && simT - goT < .32) { rocket = true; R.player.kick = 1.5; Snd.boostOn(); buzz(25); addStyle(600); toast('ROCKET START', 'k', '完璧なタイミング', 1.3, true); } prevThr = inp.boost;
     if (mode === 'count') { count.t += dt; const lit = Math.min(5, Math.floor(count.t / .5)); if (lit !== count.lit) { count.lit = lit; [...el.lights.children].forEach((i, k) => i.className = k < lit ? 'on' : ''); Snd.beep(false); }
       if (count.t >= count.go) { mode = 'race'; goT = simT; el.lights.hidden = true; Snd.beep(true); flag('GO', .7); } }
