@@ -193,6 +193,7 @@ button:focus-visible{outline:2px solid var(--amber);outline-offset:3px}
 .laplist b{color:var(--ink)}
 
 /* v3 race */
+body.heaven .h-gap{left:calc(var(--sl) + clamp(92px,30vh,160px) + 4px)!important;top:calc(108px + env(safe-area-inset-top,0px))!important;transform:none!important;text-align:left!important}
 .h-gap{position:absolute;left:50%;top:calc(10px + env(safe-area-inset-top,0px));transform:translateX(-50%);text-align:center;white-space:nowrap;font-style:italic;font-weight:700;font-stretch:84%;font-variant-numeric:tabular-nums;text-shadow:0 2px 12px rgba(0,0,0,.9)}
 .h-gap .ga{font-size:clamp(18px,5.4vh,26px);color:var(--amber)} .h-gap .gb{font-size:clamp(14px,4vh,19px);color:var(--cool);margin-top:2px}
 .h-gap small{font-size:.62em;letter-spacing:.14em;font-style:normal;font-weight:700;opacity:.8;margin-right:6px}
@@ -747,7 +748,7 @@ const KGP = (() => {
     if (Math.abs(l2.d) > lim && !(c.noRail && T.isOpen && T.isOpen(l2.i) && !T.assist)) { const p = T.S[l2.i], side = Math.sign(l2.d), pen = Math.abs(l2.d) - lim; c.x -= p.nx * side * pen; c.z -= p.nz * side * pen;
       const tyaw = Math.atan2(p.tx, -p.tz), da = angDiff(c.yaw, tyaw), into = Math.sin(da) * side; // >0: heading into the wall
       if (into > 0) { const loss = clamp(U.wallLoss * (c.hit > 0 ? .15 : 1) + U.wallAngleLoss * into, 0, .85); if (c.hit <= 0 && c.v > 3) ev.wall = c.v * (0.3 + into); c.v *= 1 - loss * (c.hit > 0 ? .25 : 1); c.yaw = tyaw + da * 0.35 - side * 0.04; c.lean *= .5; c.hit = .35; } }
-    if (T.assist) { const pq = T.S[c.idx], ty = Math.atan2(pq.tx, -pq.tz), dd = angDiff(c.yaw, ty), mx = .55; if (Math.abs(dd) > mx) c.yaw = ty + Math.sign(dd) * (mx + (Math.abs(dd) - mx) * .9); }
+    if (T.assist || T.heaven) { const pq = T.S[c.idx], ty = Math.atan2(pq.tx, -pq.tz), dd = angDiff(c.yaw, ty), mx = T.assist ? .55 : 1.0; if (Math.abs(dd) > mx) c.yaw = ty + Math.sign(dd) * (mx + (Math.abs(dd) - mx) * .9); }
     if (c.hit > 0) c.hit -= DT; if (c.wobble > 0) c.wobble -= DT; if (c.land > 0) c.land -= DT;
     // --- vertical: stick to the ground unless it falls away faster than gravity
     const l3 = locate(T, c.x, c.z, l2.i); c.idx = l3.i; c.d = l3.d; const gy = groundAt(T, l3.fi, l3.d);
@@ -1957,7 +1958,7 @@ class KRoom {
   try { const M = window.KGP_MODELS; if (M && THREE.GLTFLoader) for (const name of Object.keys(M)) { const bin = atob(M[name]), buf = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
       new THREE.GLTFLoader().parse(buf.buffer, '', g => { View.setModel(name, g.scene); window.__kgpModel = (window.__kgpModel || '') + name + ' '; }, e => console.warn('model', name, e)); } } catch (e) { console.warn('model', e); }
   if (T.heaven && THREE.GLTFLoader) fetch('human.glb').then(r => r.ok ? r.arrayBuffer() : Promise.reject(r.status)).then(ab => new THREE.GLTFLoader().parse(ab, '', g => View.setHuman(g), e => console.warn('human', e))).catch(e => console.warn('human', e));
-  let RS = 1; try { RS = Math.min(1, Math.max(.75, +localStorage.getItem('kickgp.rs2') || 1)); } catch (e) { }
+  let RS = 1; try { RS = Math.min(1, Math.max(.6, +localStorage.getItem('kickgp.rs2') || 1)); } catch (e) { }
   function resize() { const w = cv.clientWidth || innerWidth, h = cv.clientHeight || innerHeight; View.resize(w, h, Math.min(2, window.devicePixelRatio || 1) * RS); }
   addEventListener('resize', resize); resize();
 
@@ -1979,7 +1980,7 @@ class KRoom {
   const fmtD = d => (d < 0 ? '−' : '+') + Math.abs(d).toFixed(3);
   const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const cleanNick = t => String(t || '').replace(/[\u0000-\u001F\u007F-\u009F\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]/g, '').trim().slice(0, 10).toUpperCase() || 'RIDER';
-  if (!save.qLock && save.qv !== 2) { save.q = 2; save.qv = 2; }
+  if (!save.qLock && save.qv !== 3) { save.q = 2; save.qv = 3; }
   View.setQuality(save.q);
   const wrapN = a => { a %= KGP_N; if (a > KGP_N / 2) a -= KGP_N; if (a < -KGP_N / 2) a += KGP_N; return a; }; let KGP_N = 1;
 
@@ -2435,7 +2436,7 @@ class KRoom {
       if (mode === 'race') callout(); else el.call.hidden = true;
       el.vig.style.opacity = (.42 + clamp(car.v / KGP.TUNE.vMax, 0, 1.1) * .4).toFixed(2);
       if (toastT > 0 && (toastT -= dt) <= 0) el.toast.hidden = true; if (flagT > 0 && (flagT -= dt) <= 0) el.flag.hidden = true;
-      if (!save.qLock && (mode === 'race' || (coarse && mode === 'title'))) { fAcc += Math.min(rawDt, .1); fN++; if (fN >= (coarse ? 60 : 90)) { const avg = fAcc / fN; fAcc = fN = 0; if (avg > (coarse ? .022 : .03)) { if (++slow >= 2) { if (RS > (coarse ? .76 : .61)) { RS = Math.max(coarse ? .75 : .6, RS - .125); try { localStorage.setItem('kickgp.rs2', RS); } catch (e) { } resize(); } else if (View.quality > 0) { View.setQuality(View.quality - 1); save.q = View.quality; persist(); } slow = 0; } } else slow = 0; } } }
+      if (!save.qLock && (mode === 'race' || (coarse && mode === 'title'))) { fAcc += Math.min(rawDt, .1); fN++; if (fN >= (coarse ? 60 : 90)) { const avg = fAcc / fN; fAcc = fN = 0; if (avg > (coarse ? .022 : .03)) { if (++slow >= 2) { if (RS > .61) { RS = Math.max(.6, RS - .1); try { localStorage.setItem('kickgp.rs2', RS); } catch (e) { } resize(); } else if (View.quality > 0 && !T.heaven) { View.setQuality(View.quality - 1); save.q = View.quality; persist(); } slow = 0; } } else slow = 0; } } }
     { const ldv = T.line ? T.line[car.idx] : 0, onL = !car.air && car.v > 12 && Math.abs(car.d - ldv) < .75 ? 1 : 0, under = T.theme === 'abyss' && car.y < -2 && mode !== 'title' ? 1 : 0; if (under && !frame.under && mode === 'race') Snd.dive(); frame.under = under;
       Snd.frame(car, inp.throttle, mode === 'race' || mode === 'finish', P.boosting || P.kick > 0, onL, under); }
     { const racing = mode === 'race' || mode === 'count' || mode === 'finish'; if (T.heaven) Snd.heaven(clamp((car.y - 4) / 200, 0, 1), (mode === 'race' || mode === 'finish') && mode !== 'paused'); Snd.music(mode === 'paused' ? .08 : racing ? .4 : .2, racing ? clamp(car.v / 30, 0, 1) * .75 + (P.boosting ? .25 : 0) : .12, racing ? flow / 100 : .2); }
