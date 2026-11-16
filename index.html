@@ -569,7 +569,7 @@ const KGP = (() => {
       feat: T => { const at = f => Math.round(f * T.N) % T.N, S = T.S, N = T.N;
         // 頂上（天の門）と、その先の大ジャンプ
         let top = at(.62), hi = -1e9; for (let i = at(.5); i < at(.75); i++) if (S[i].y > hi) { hi = S[i].y; top = i; }
-        T.top = top; T.lift = { i0: (top - 62 + N) % N, len: 57, v: 9.5 };
+        T.top = top; T.lift = { i0: (top - 62 + N) % N, len: 57, v: 16 };
         T.ramps = [{ i0: (top + 40) % N, len: 16, h: 3.0 }, { i0: at(.755), len: 14, h: 2.6 }]; T.ramp = T.ramps[0];
         for (const [f, h] of [[.07, 2.4], [.195, 2.7], [.79, 2.8], [.925, 2.6], [.97, 3.2]]) T.ramps.push({ i0: at(f), len: 13, h });
         // 仕掛け：上昇気流（v=打ち上げの強さ）と雲のトランポリン
@@ -640,7 +640,11 @@ const KGP = (() => {
           T.rings = T.rings.filter(r => !inR2(r.i, at(.36), at(.375)) && !inR2(r.i, at(.61), at(.62)));
           if (T.glass) for (const p of T.pads) if (inR2(p.i, T.glass.i0, T.glass.i1)) p.d = -1.75;
           // 序盤から「落ちる→浮く」：小さな落下を2か所
-          for (const [f0, L, D] of [[.09, 110, 26], [.29, 120, 32], [.465, 120, 30]]) { const i0 = at(f0); for (let k = 0; k <= L; k++) { const i = (i0 + k) % N, sn = Math.sin(Math.PI * k / L); S[i].y -= D * sn * sn; } }
+          { const i0 = at(.09), L = 110, D = 26; for (let k = 0; k <= L; k++) { const i = (i0 + k) % N, sn = Math.sin(Math.PI * k / L); S[i].y -= D * sn * sn; } }
+          T.glueR = []; T.povR = [];
+          for (const [f0, Lw, Lc, D] of [[.29, 26, 180, 55], [.465, 26, 175, 68]]) { const i0 = at(f0), a = 7, nrm = Math.tanh(a / 2);
+            for (let k = 0; k <= Lw + Lc; k++) { const i = (i0 + k) % N; let off; if (k <= Lw) { const x = k / Lw; off = -D * (.5 + .5 * Math.tanh(a * (x - .5)) / nrm); } else { const x = (k - Lw) / Lc, sm = x * x * x * (x * (x * 6 - 15) + 10); off = -D * (1 - sm); } S[i].y += off; }
+            T.glueR.push([(i0 - 6 + N) % N, (i0 + Lw + 30) % N]); T.povR.push([(i0 - 16 + N) % N, (i0 + Lw + 24) % N]); }
           for (let i = 0; i < N; i++) S[i].slope = (S[(i + 1) % N].y - S[(i + N - 1) % N].y) / (2 * T.ds);
           const CKN = ['UPDRAFT', 'DIP', 'STARS', 'BIG UPDRAFT', 'HEAVEN GATE', 'THE WALL', 'AIRTIME', 'FINAL'];
           if (T.ckpts) T.ckpts.forEach((c, k) => { if (CKN[k]) c.n = CKN[k]; }); }
@@ -781,7 +785,7 @@ const KGP = (() => {
     c.slide = lerp(c.slide, c.drifting ? .75 : over, .2);
     c.v = Math.max(0, c.v + aLong * DT);
     // --- move
-    const hx = Math.sin(c.yaw), hz = -Math.cos(c.yaw); c.x += hx * c.v * DT; c.z += hz * c.v * DT; c.dist += c.v * DT;
+    const hx = Math.sin(c.yaw), hz = -Math.cos(c.yaw), vh = c.v * (T.heaven && !c.air ? 1 / Math.sqrt(1 + sp.slope * sp.slope) : 1); c.x += hx * vh * DT; c.z += hz * vh * DT; c.dist += vh * DT;
     // --- walls
     const l2 = locate(T, c.x, c.z, c.idx); const lim = T.halfW - 0.45;
     if (Math.abs(l2.d) > lim && !(c.noRail && T.isOpen && T.isOpen(l2.i) && !T.assist && !T.heaven)) { const p = T.S[l2.i], side = Math.sign(l2.d), pen = Math.abs(l2.d) - lim; c.x -= p.nx * side * pen; c.z -= p.nz * side * pen;
@@ -797,7 +801,7 @@ const KGP = (() => {
     const l3 = locate(T, c.x, c.z, l2.i); c.idx = l3.i; c.d = l3.d; const gy = groundAt(T, l3.fi, l3.d);
     const yb = c.y + c.vy * DT - 0.5 * G * DT * DT;
     let sepA = 0; const okAir = T.heaven && T.top != null && (((l3.i - T.top + T.N) % T.N) < 14 || false); if (T.heaven && !c.air && c.gl < -.1 && okAir) { const fa = l3.fi + c.v * .2 / T.ds; sepA = (c.y + c.vy * .2 - .5 * G * .04) - groundAt(T, ((fa % T.N) + T.N) % T.N, l3.d); }
-    if (gy >= yb - (sepA > .1 ? 0 : T.heaven && !c.air && !okAir && T.top != null && ((l3.i - T.top + T.N) % T.N) < 160 ? 99 : 0.12)) { // on ground (small tolerance: only real drops launch you)
+    if (gy >= yb - (sepA > .1 ? 0 : T.heaven && !c.air && !okAir && T.top != null && (((l3.i - T.top + T.N) % T.N) < 160 || (T.glueR && T.glueR.some(g => ((l3.i - g[0] + T.N) % T.N) <= ((g[1] - g[0] + T.N) % T.N)))) ? 99 : 0.12)) { // on ground (small tolerance: only real drops launch you)
       if (c.air) { const p = T.S[l3.i]; const impact = Math.max(0, -(c.vy) + c.v * p.slope); const soft = back > .4; const loss = (soft ? U.landAbsorb : U.landHard) + Math.min(.12, Math.abs(c.pitch) * .25);
         const quiet = T.heaven && c.natAir && impact < 9; if (!quiet) c.v *= 1 - loss; if (!(c.natAir && c.airT < .25)) ev.land = { impact, soft, airT: c.airT, nat: !!c.natAir }; c.natAir = false; if (quiet) { c.pitch = 0; } else { c.land = .5; if (!soft) c.wobble = .7; c.pitch = 0; } }
       c.vy = clamp((gy - c.y) / DT, -30, 30); c.y = gy; c.air = false; c.airT = 0;
@@ -1884,16 +1888,16 @@ const View = (() => {
     if (T.heaven) { const sl = T.S[c.idx].slope; SK.look = lerp(SK.look || 0, (sl > 0 ? sl * 11 : sl * 6) * (View.comfort ? .45 : 1), Math.min(1, dt * 2)); if (Math.abs(SK.look) > .05) camera.lookAt(c.x + hx * (2.5 + vr * 4), c.y + .78 + vr * .1 + SK.look, c.z + hz * (2.5 + vr * 4)); }
     // 目線カメラ（頂上→急降下、浮き上がる丘）：快適カメラでは使わない
     if (T.heaven && T.top != null && T.hills) { const N0 = T.N, a1 = (c.idx - T.top + 4 + N0) % N0, h3 = (c.idx - (T.hills.i0 + 112) + N0) % N0;
-      const want = !View.comfort && opt.boost !== undefined && (a1 < 140 || h3 < 66) ? 1 : 0; SK.pov = (SK.pov || 0) + (want - (SK.pov || 0)) * Math.min(1, dt * (want ? 3.2 : 2.2));
+      const want = !View.comfort && opt.boost !== undefined && (a1 < 140 || h3 < 66 || (T.povR && T.povR.some(g => ((c.idx - g[0] + N0) % N0) <= ((g[1] - g[0] + N0) % N0)))) ? 1 : 0; SK.pov = (SK.pov || 0) + (want - (SK.pov || 0)) * Math.min(1, dt * (want ? 3.2 : 2.2));
       if (SK.pov > .01) { const w = SK.pov * SK.pov * (3 - 2 * SK.pov), g = c.gs == null ? 1 : c.gs, fl = clamp(.8 - g, 0, 1.6);
         SK.povSink = (SK.povSink || 0) + (fl * .22 - (SK.povSink || 0)) * Math.min(1, dt * 5);
-        const ia = (c.idx + 14) % N0, pa = T.S[ia], ex = c.x + hx * .25, ey = c.y + 1.55 - SK.povSink, ez = c.z + hz * .25;
-        const lx = pa.x + pa.nx * c.d, ly = pa.y + 1.0, lz = pa.z + pa.nz * c.d;
+        const sl1 = T.S[c.idx].slope, cth = 1 / Math.sqrt(1 + sl1 * sl1), sth = sl1 * cth, fx = hx * cth, fz = hz * cth, ia = (c.idx + 14) % N0, pa = T.S[ia], ex = c.x - fx * 1.3, ey = c.y + 1.9 - sth * 1.3 - SK.povSink, ez = c.z - fz * 1.3;
+        const lx = c.x + fx * 14, ly = c.y + 1.2 + sth * 14 * .85, lz = c.z + fz * 14;
         const px = camera.position.x, py = camera.position.y, pz = camera.position.z;
         camera.position.set(px + (ex - px) * w, py + (ey - py) * w, pz + (ez - pz) * w);
         const tx0 = c.x + hx * (2.5 + vr * 4), ty0 = c.y + .78 + vr * .1 + (SK.look || 0), tz0 = c.z + hz * (2.5 + vr * 4);
-        camera.up.set(0, 1, 0); camera.lookAt(tx0 + (lx - tx0) * w, ty0 + (ly - ty0) * w, tz0 + (lz - tz0) * w);
-        if (rider) rider.root.visible = w < .55; } else if (rider && !rider.root.visible) rider.root.visible = true; }
+        { const st = Math.min(1, Math.max(0, -sth * w)); camera.up.set(hx * st, 1, hz * st).normalize(); } camera.lookAt(tx0 + (lx - tx0) * w, ty0 + (ly - ty0) * w, tz0 + (lz - tz0) * w);
+        if (rider) rider.root.visible = true; } else if (rider && !rider.root.visible) rider.root.visible = true; }
     if (T.heaven && SK && SK.cine > 0) heavenCine(c, dt);
     fovK = Math.max(0, fovK - dt * 1.4); const fov = (portrait ? 78 : 56) + 21 * vr * vr + Math.max(0, weight) * 4 + boostVis * 17 + fovK * 16; cam.fov += (fov - cam.fov) * Math.min(1, dt * 4); camera.fov = cam.fov; camera.updateProjectionMatrix();
     if (T.heaven) for (const m of rivals) if (m && m.tag && m.root.visible) { const dd = camera.position.distanceTo(m.root.position); m.tag.sp.material.opacity = clamp((dd - 6) / 8, 0, 1); }
