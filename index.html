@@ -571,7 +571,7 @@ const KGP = (() => {
         let top = at(.62), hi = -1e9; for (let i = at(.5); i < at(.75); i++) if (S[i].y > hi) { hi = S[i].y; top = i; }
         T.top = top; T.lift = { i0: (top - 62 + N) % N, len: 57, v: 16 };
         T.ramps = [{ i0: (top + 40) % N, len: 16, h: 3.0 }, { i0: at(.755), len: 14, h: 2.6 }]; T.ramp = T.ramps[0];
-        for (const [f, h] of [[.07, 2.4], [.195, 2.7], [.79, 2.8], [.925, 2.6], [.97, 3.2]]) T.ramps.push({ i0: at(f), len: 13, h });
+        for (const [f, h] of [[.07, 2.4], [.195, 2.7], [.79, 2.8], [.875, 2.7], [.925, 2.6], [.97, 3.2]]) T.ramps.push({ i0: at(f), len: 13, h });
         // 仕掛け：上昇気流（v=打ち上げの強さ）と雲のトランポリン
         T.lifts = [
           { i: at(.135), d: 0, r: T.halfW + .3, v: 13, k: .7, t: 'updraft' },
@@ -790,8 +790,8 @@ const KGP = (() => {
     const l2 = locate(T, c.x, c.z, c.idx); const lim = T.halfW - 0.45;
     if (Math.abs(l2.d) > lim && !(c.noRail && T.isOpen && T.isOpen(l2.i) && !T.assist && !T.heaven)) { const p = T.S[l2.i], side = Math.sign(l2.d), pen = Math.abs(l2.d) - lim; c.x -= p.nx * side * pen; c.z -= p.nz * side * pen;
       const tyaw = Math.atan2(p.tx, -p.tz), da = angDiff(c.yaw, tyaw), into = Math.sin(da) * side; // >0: heading into the wall
-      if (into > 0) { const loss = clamp(U.wallLoss * (c.hit > 0 ? .15 : 1) + U.wallAngleLoss * into, 0, .85); if (c.hit <= 0 && c.v > 3) ev.wall = c.v * (0.3 + into); c.v *= 1 - loss * (c.hit > 0 ? .25 : 1); c.yaw = tyaw + da * 0.35 - side * 0.04; c.lean *= .5; c.hit = .35; } }
-    if (T.lift && !c.air) { const la = (c.idx - T.lift.i0 + T.N) % T.N; c.onLift = la < T.lift.len; if (c.onLift) c.v += (T.lift.v - c.v) * .06; } else c.onLift = false;
+      if (into > 0) { const loss = T.heaven ? clamp(.02 * (c.hit > 0 ? .3 : 1) + .2 * into, 0, .3) : clamp(U.wallLoss * (c.hit > 0 ? .15 : 1) + U.wallAngleLoss * into, 0, .85); if (c.hit <= 0 && c.v > 3) ev.wall = c.v * (0.3 + into); c.v *= 1 - loss * (c.hit > 0 ? .25 : 1); c.yaw = tyaw + da * 0.35 - side * 0.04; c.lean *= .5; c.hit = .35; } }
+    if (T.lift && !c.air) { const la = (c.idx - T.lift.i0 + T.N) % T.N; c.onLift = la < T.lift.len; if (c.onLift) c.v += (T.lift.v - c.v) * (T.heaven && c.v > T.lift.v ? .004 : .06); } else c.onLift = false;
     if (T.glass && !c.air && c.d < -.3) { const ga = (c.idx - T.glass.i0 + T.N) % T.N; if (ga < T.glass.i1 - T.glass.i0) { c.v += 8 * DT; c.onGlass = true; } else c.onGlass = false; } else c.onGlass = false;
     if (T.heaven && !c.air) { const edge = Math.abs(c.d) - (T.halfW - 1.0); c.edge = edge > 0 ? Math.min(1, edge / .55) : 0; if (c.edge > 0 && c.v > 12) c.v += 2.4 * c.edge * DT; } else c.edge = 0;
     if (T.assist || T.heaven) { const pq = T.S[c.idx], ty = Math.atan2(pq.tx, -pq.tz), dd = angDiff(c.yaw, ty), mx = T.assist ? .55 : 1.0; if (Math.abs(dd) > mx) c.yaw = ty + Math.sign(dd) * (mx + (Math.abs(dd) - mx) * .9); }
@@ -837,11 +837,11 @@ KGP.Race = (() => {
     let rs = seed + 77; R.rng = () => { rs = (rs * 16807) % 2147483647; return (rs - 1) / 2147483646; }; R.zapOut = [];
     place(R); return R;
   }
-  function mk(T, idx, d, ai) { return { c: KGP.spawn(T, idx, d), ai: ai ? { skill: ai.skill, off: d, line: ai.line } : null, name: ai ? ai.name : 'YOU', col: ai ? ai.col : 0xff8a1f, lap: 0, prog: idx - T.N, fin: null, boost: ai ? .2 : 0, boosting: false, kick: 0, item: null, itemT: 0, shield: 0, shocked: 0, down: 0, inv: 0, wipes: 0, slip: false, pos: 1, w: 0, hitT: 0, nearN: 0, top: 0, bestLap: null, lapT0: null }; }
+  function mk(T, idx, d, ai) { return { c: KGP.spawn(T, idx, d), ai: ai ? { skill: ai.skill * (T.heaven ? .98 : 1), off: d, line: ai.line } : null, name: ai ? ai.name : 'YOU', col: ai ? ai.col : 0xff8a1f, lap: 0, prog: idx - T.N, fin: null, boost: ai ? .2 : 0, boosting: false, kick: 0, item: null, itemT: 0, shield: 0, shocked: 0, down: 0, inv: 0, wipes: 0, slip: false, pos: 1, w: 0, hitT: 0, nearN: 0, top: 0, bestLap: null, lapT0: null }; }
   function carXY(T, car) { const N = T.N, fi = ((car.fi % N) + N) % N, i0 = Math.floor(fi) % N, t = fi - Math.floor(fi), a = T.S[i0], b = T.S[(i0 + 1) % N]; return { x: lerp(a.x, b.x, t) + lerp(a.nx, b.nx, t) * car.d, z: lerp(a.z, b.z, t) + lerp(a.nz, b.nz, t) * car.d, y: KGP.groundAt(T, fi, car.d), yaw: Math.atan2(a.tx, -a.tz), bank: a.bank, slope: a.slope }; }
 
   function aiInput(R, r, a = r.ai) {
-    const T = R.T, N = T.N, c = r.c; const band = clamp((R.player.prog - r.prog) / 160, -.07, .08), skill = a.skill * (1 + band);
+    const T = R.T, N = T.N, c = r.c; const band = clamp((R.player.prog - r.prog) / 160, -.07, T.heaven ? 0 : .08), skill = a.skill * (1 + band);
     let want = a.line, blockV = 99, nearest = 1e9;
     for (const car of R.cars) { const ds = wrap(car.fi - c.idx, N) * T.ds; if (ds < -3 || ds > 42 || ds > nearest) continue; const lo = Math.min(car.d, car.dT), hi = Math.max(car.d, car.dT), m = car.W / 2 + 1.25; if ((c.d < lo - m || c.d > hi + m) && (a.off < lo - m || a.off > hi + m)) continue; nearest = ds;
       const L = lo - (car.W / 2 + 1.55), Rr = hi + (car.W / 2 + 1.55), okL = L >= -T.halfW + .95, okR = Rr <= T.halfW - .95;
@@ -886,7 +886,7 @@ KGP.Race = (() => {
       if (!hold && r.isPlayer && T.blocks.length && !c.air && !(r.inv > 0)) for (const b of T.blocks) { const bd = b.amp * Math.sin(R.t * b.w + b.ph), a = wrap(prevIdx - b.i, N), bb = wrap(c.idx - b.i, N); if (a <= 0 && bb >= 0 && Math.abs(c.d - bd) < 1.15) { c.v *= .5; r.boost = Math.max(0, r.boost - .25); r.inv = .9; out.block = true; } }
       if (!hold && !c.air && T.inDiv && T.inDiv(c.idx) && Math.abs(c.d) < .5) { const sg = Math.sign(c.d) || 1, p = T.S[c.idx]; c.x += p.nx * sg * (.5 - Math.abs(c.d)); c.z += p.nz * sg * (.5 - Math.abs(c.d)); c.d = sg * .5; c.v *= T.heaven ? .997 : .985; if (T.heaven) { const ty = Math.atan2(p.tx, -p.tz); c.yaw = ty + angDiff(c.yaw, ty) * .5; } if (r.isPlayer) out.scrape = true; }
       if (!hold && T.pads.length && !c.air) for (const g of T.pads) { const a = wrap(prevIdx - g.i, N), b = wrap(c.idx - g.i, N); if (a < 0 && b >= 0 && Math.abs(c.d - g.d) < 1.3) { r.kick = Math.max(r.kick, .9); r.boost = Math.min(1, r.boost + .08); if (r.isPlayer) out.pad = true; } }
-      if (T.gaps && !c.air && !hold) for (const gp of T.gaps) { const a = (c.idx - gp.i0 + N) % N, len = (gp.i1 - gp.i0 + N) % N; if (a <= len) { if (gp.wire && (Math.abs(c.d - gp.d) < (T.assist ? T.halfW + .6 : .8) || !r.isPlayer)) { r.kick = Math.max(r.kick, .45); if (r.isPlayer) out.wire = true; continue; } if ((T.assist || T.heaven) && r.isPlayer) { c.vy = Math.max(c.vy, 9.5); c.y += .3; c.air = true; c.v = Math.max(c.v, 24); r.kick = Math.max(r.kick, .5); out.save = true; break; }
+      if (T.gaps && !c.air && !hold) for (const gp of T.gaps) { const a = (c.idx - gp.i0 + N) % N, len = (gp.i1 - gp.i0 + N) % N; if (a <= len) { if (gp.wire && (Math.abs(c.d - gp.d) < (T.assist || T.heaven ? T.halfW + .6 : .8) || !r.isPlayer)) { r.kick = Math.max(r.kick, .45); if (r.isPlayer) out.wire = true; continue; } if ((T.assist || T.heaven) && r.isPlayer) { c.vy = Math.max(c.vy, 9.5); c.y += .3; c.air = true; c.v = Math.max(c.v, 24); r.kick = Math.max(r.kick, .5); out.save = true; break; }
         const ni = (gp.i1 + 4) % N, nc = KGP.spawn(T, ni, clamp(c.d, -1.5, 1.5)); nc.v = Math.max(9, c.v * .45); nc.dist = c.dist; Object.assign(c, nc); r.inv = 1.4; r.boost = Math.max(0, r.boost - .3); if (r.isPlayer) out.fall = true; break; } }
       if (ev.drift) { const lv = ev.drift > 2.2 ? 3 : ev.drift > 1.2 ? 2 : 1; r.kick = .45 + lv * .4; r.boost = Math.min(1, r.boost + .05 * lv); ev.drift = { t: ev.drift, lv }; } r.w = inp.weight; if (r.hitT > 0) r.hitT -= DT; r.top = Math.max(r.top, c.v);
       if (ev.land && ev.land.soft && ev.land.airT > .4) r.boost = Math.min(1, r.boost + BOOST.land);
@@ -1256,7 +1256,7 @@ float fW(vec2 p){ float v=0.0, a=0.5; for(int k=0;k<4;k++){ v+=a*nW(p); p=p*2.07
         g.scene.traverse(o => { if (!o.isMesh) return; const im = new THREE.InstancedMesh(o.geometry, matFor(o.material.name), list.length); list.forEach((it, k) => { q.setFromAxisAngle(up, it.ry); pv.set(it.p[0], it.p[1], it.p[2]); mm.compose(pv, q, one).multiply(o.matrixWorld); im.setMatrixAt(k, mm); }); im.frustumCulled = false; scene.add(im); hideInRefl.push(im); }); }, undefined, e => console.warn('world', url, e)); };
       const posts = [], lamps = [];
       for (const [a, b] of rails) for (let i = a; i <= b; i += 5) { const yaw = -frameAt(i, 0, 0).yaw; for (const sd of [-1, 1]) { posts.push({ p: P(i, sd * (hw + .12), .07), ry: yaw }); if (i % 45 < 5 && ((i / 45 | 0) % 2 ? sd > 0 : sd < 0)) lamps.push({ p: P(i, sd * (hw + .12), .07), ry: yaw + (sd > 0 ? -Math.PI / 2 : Math.PI / 2) }); } }
-      place('world/post.glb', posts); place('world/lantern.glb', lamps);
+      place('world/post_lo.glb', posts); place('world/lantern.glb', lamps);
       SK.placeTorii = () => place('world/torii.glb', (SK.toriiQ || []).map(g => ({ p: P(g.i, 0, 0), ry: -frameAt(g.i, 0, 0).yaw })));
     }
     // the line + the gold rails
@@ -1305,10 +1305,10 @@ float fW(vec2 p){ float v=0.0, a=0.5; for(int k=0;k<4;k++){ v+=a*nW(p); p=p*2.07
     { const g = T.rings.find(r => r.up); if (g) { const f = frameAt(g.i, g.d, g.up); const grp = new THREE.Group(); grp.add(new THREE.Mesh(new THREE.TorusGeometry(g.r, .45, 10, 48), GOLD)); if (!T.heaven) grp.add(new THREE.Mesh(new THREE.CircleGeometry(g.r - .2, 40), add({ map: glow, color: 0xffd36b, opacity: .3 }))); grp.position.set(...f.pos); grp.rotation.y = -f.yaw; scene.add(grp); SK.skyRing = grp; } }
     for (const g of T.rings) { if (g.up) continue; if (g.torii) { if (T.heaven) (SK.toriiQ = SK.toriiQ || []).push(g); else buildTorii(g, GOLD); continue; } const f = frameAt(g.i, g.d, g.r + .25), grp = new THREE.Group(); grp.add(new THREE.Mesh(new THREE.TorusGeometry(g.r, .2, 8, 44), GOLD), new THREE.Mesh(new THREE.CircleGeometry(g.r - .1, 40), add({ map: glow, color: 0xffe9a8, opacity: .3 }))); grp.position.set(...f.pos); grp.rotation.y = -f.yaw; scene.add(grp); }
     if (T.heaven && SK.placeTorii) SK.placeTorii();
-    if (T.heaven && SK.isl && THREE.GLTFLoader) new THREE.GLTFLoader().load('world/island.glb', g => {
+    if (T.heaven && SK.isl && THREE.GLTFLoader) new THREE.GLTFLoader().load('world/island_lo.glb', g => {
       const IM = {}, mf = n => IM[n] || (IM[n] = (() => { const m = n === 'rock' ? new THREE.MeshStandardMaterial(Object.assign(pbrT('rock_face_03', 6, 6), { color: 0xa8927a, roughness: 1, envMapIntensity: .45 }))
         : n === 'lacquer' ? lacquerMat() : n === 'stone' ? new THREE.MeshStandardMaterial(Object.assign(pbrT('granite_tile', 2, 2), { color: 0xc9c2b8, roughness: 1 }))
-        : new THREE.MeshStandardMaterial(Object.assign(n === 'grass' ? Object.assign(pbrT('rock_face_03', 14, 14), { map: null }) : {}, { color: { grass: 0x5d7a3a, pine: 0x24402a, bark: 0x4a3424, roof: 0x24201d }[n] || 0x888888, roughness: n === 'roof' ? .6 : .95, envMapIntensity: .5 })); m.vertexColors = true; return m; })());
+        : new THREE.MeshStandardMaterial(Object.assign(n === 'grass' ? Object.assign(pbrT('rock_face_03', 6, 6), { map: null }) : {}, { color: { grass: 0x5d7a3a, pine: 0x24402a, bark: 0x4a3424, roof: 0x24201d }[n] || 0x888888, roughness: n === 'roof' ? .6 : .95, envMapIntensity: .5 })); m.vertexColors = true; return m; })());
       for (const it of SK.isl) { const m = g.scene.clone(true); m.traverse(o => { if (o.isMesh) o.material = mf(o.material.name); }); m.scale.setScalar(it.s * 1.15); m.position.set(it.x, it.y, it.z); m.rotation.y = it.ry; scene.add(m); hideInRefl.push(m); it.rock.visible = false; }
     }, undefined, e => console.warn('island', e));
     if (!T.heaven) { const ag = new THREE.TorusGeometry(hw + 1.4, .07, 6, 32, Math.PI); const am = add({ color: 0xffe2a0, opacity: .75 }); for (let i = 0; i < N; i += 24) { const p = T.S[i]; if (Math.abs(p.curv) > .01 || T.inGap(i) || T.inGap(i + 4)) continue; const f = frameAt(i, 0, 0); const a = new THREE.Mesh(ag, am); a.position.set(...f.pos); a.rotation.y = -f.yaw; scene.add(a); hideInRefl.push(a); } }
@@ -1443,7 +1443,7 @@ float fW(vec2 p){ float v=0.0, a=0.5; for(int k=0;k<4;k++){ v+=a*nW(p); p=p*2.07
     for (let i = 0; i < 40; i++) { x.fillStyle = `rgba(50,30,25,${.25 + rnd() * .4})`; x.beginPath(); x.ellipse(rnd() * 128, rnd() * 512, .6 + rnd() * 2.2, .5 + rnd() * 1.6, rnd() * 3, 0, 7); x.fill(); }
     return tex(c, true); }
   const PBRL = new THREE.TextureLoader();
-  const pbrT = (n, rx, ry) => { const f = k => { const t = PBRL.load('tex/' + n + '_' + k + '.jpg'); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry); t.anisotropy = 4; return t; }; return { map: f('diff'), normalMap: f('nor'), roughnessMap: f('rough') }; };
+  const PBRC = {}; const pbrT = (n, rx, ry) => { const key = n + ':' + rx + 'x' + ry; if (PBRC[key]) return Object.assign({}, PBRC[key]); const f = k => { const t = PBRL.load('tex/' + n + '_' + k + '.jpg'); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry); t.anisotropy = 4; return t; }; return Object.assign({}, PBRC[key] = { map: f('diff'), normalMap: f('nor'), roughnessMap: f('rough') }); };
   const lacquerMat = () => new THREE.MeshStandardMaterial(Object.assign(pbrT('red_plaster_weathered', 1, 2), { color: 0xffc2b4, roughness: 1, metalness: 0, envMapIntensity: .9 }));
   function buildTorii(g, GOLD) {
     const hw = T.halfW, f = frameAt(g.i, 0, 0), grp = new THREE.Group(), w = hw + 1.0, H = 7.2;
@@ -1623,7 +1623,7 @@ float fW(vec2 p){ float v=0.0, a=0.5; for(int k=0;k<4;k++){ v+=a*nW(p); p=p*2.07
     if (SK.skyMesh) { scene.remove(SK.skyMesh); SK.skyScene = new THREE.Scene(); SK.skyScene.add(SK.skyMesh); SK.skyRT = new THREE.WebGLRenderTarget(2, 2, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat, depthBuffer: false }); scene.background = SK.skyRT.texture; }
     { const bt = mkCanvas(64, 64), bx = bt.getContext('2d'), g = bx.createRadialGradient(32, 32, 0, 32, 32, 32); g.addColorStop(0, 'rgba(0,0,0,.75)'); g.addColorStop(.55, 'rgba(0,0,0,.35)'); g.addColorStop(1, 'rgba(0,0,0,0)'); bx.fillStyle = g; bx.fillRect(0, 0, 64, 64);
       SK.blob = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: tex(bt), transparent: true, depthWrite: false, color: 0xffffff })); SK.blob.renderOrder = 3; scene.add(SK.blob); hideInRefl.push(SK.blob); } camera.updateProjectionMatrix(); if (SK.skyMesh) SK.skyMesh.renderOrder = -1;
-    if (DL && renderer) { renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; DL.castShadow = true; DL.shadow.mapSize.set(1024, 1024);
+    if (DL && renderer) { renderer.shadowMap.enabled = true; renderer.shadowMap.type = LITE ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap; DL.castShadow = true; DL.shadow.mapSize.set(LITE ? 512 : 1024, LITE ? 512 : 1024);
       const sc = DL.shadow.camera; sc.left = -7; sc.right = 7; sc.top = 7; sc.bottom = -7; sc.near = 1; sc.far = 90; sc.updateProjectionMatrix(); DL.shadow.bias = -.0006; DL.shadow.normalBias = .03; scene.add(DL.target); SK.rcv = 0; }
     // 雲の層：昇る途中で2回、雲を突き抜ける
     SK.layers = [];
@@ -1840,8 +1840,9 @@ float fW(vec2 p){ float v=0.0, a=0.5; for(int k=0;k<4;k++){ v+=a*nW(p); p=p*2.07
     const L2 = lo.clone(true), U2 = up.clone(true); U2.position.set(0, 0, 0); toonify(L2, r.colors); toonify(U2, r.colors); inkOutline(L2, 1.05); inkOutline(U2, 1.05);
     r.body.children.forEach(ch => { if (ch !== r.upper) ch.visible = false; }); r.upper.children.forEach(ch => ch.visible = false); r.body.add(L2); r.upper.add(U2); r.riderModel = true; }
   // ---- 人の3Dモデル（HEAVEN ASCENT の自分のライダー） ----
+  function toStd(m, skin) { if (!m || !m.isMeshPhysicalMaterial) return m; const n = new THREE.MeshStandardMaterial({ name: m.name, map: m.map, normalMap: m.normalMap, roughnessMap: m.roughnessMap, metalnessMap: m.metalnessMap, color: m.color, roughness: m.roughness, metalness: m.metalness, emissive: m.emissive, emissiveMap: m.emissiveMap, emissiveIntensity: m.emissiveIntensity, vertexColors: m.vertexColors, transparent: m.transparent, alphaTest: m.alphaTest, side: m.side, skinning: !!skin }); m.dispose(); return n; }
   function useScooterReal(r) { const g = MODELS.scooterReal; if (!g || !r || r.realSc || r.isGhost || !T.heaven) return; const m = g.scene.clone(true);
-    m.traverse(o => { if (o.isMesh) { o.frustumCulled = false; o.castShadow = true; o.material = o.material.clone(); o.material.envMapIntensity = /alu|chrome/.test(o.material.name) ? 1.2 : .7; } });
+    m.traverse(o => { if (o.isMesh) { o.frustumCulled = false; o.castShadow = true; o.material = toStd(o.material.clone()); o.material.envMapIntensity = /alu|chrome/.test(o.material.name) ? 1.2 : .7; } });
     r.sc.children.forEach(ch => ch.visible = false); r.sc.add(m); const wf = m.getObjectByName('WheelF'), wr = m.getObjectByName('WheelR'); if (wf && wr) r.wheels = [wf, wr]; if (r.under) r.under.visible = false; r.realSc = m; }
   function setScooterReal(g) { MODELS.scooterReal = g; for (const r of [rider, ...rivals]) useScooterReal(r); }
   function setHuman(g) { MODELS.human = g; if (rider) useHuman(rider); }
@@ -1849,7 +1850,7 @@ float fW(vec2 p){ float v=0.0, a=0.5; for(int k=0;k<4;k++){ v+=a*nW(p); p=p*2.07
     const g = gIn || MODELS.human; if (!g || r.human || !T.heaven) return; const mp = !(g.animations && g.animations.length);
     const h = g.scene; h.updateMatrixWorld(true);
     // 服を明るいグレーのライダースーツに（元の模様は残して色だけ抜く）
-    if (mp) h.traverse(o => { if (!o.isMesh) return; o.frustumCulled = false; o.castShadow = true; if (o.material) { const m = o.material, thin = /hair|ponytail|eyebrow|eyelash/i.test(o.name); m.transparent = false; m.depthWrite = true; m.alphaTest = thin ? .5 : 0; m.side = thin ? THREE.DoubleSide : THREE.FrontSide; m.envMapIntensity = .8; if (o.material.map) o.material.map.anisotropy = 4; } });
+    if (mp) h.traverse(o => { if (!o.isMesh) return; o.frustumCulled = false; o.castShadow = true; if (o.material) o.material = toStd(o.material, o.isSkinnedMesh); if (o.material) { const m = o.material, thin = /hair|ponytail|eyebrow|eyelash/i.test(o.name); m.transparent = false; m.depthWrite = true; m.alphaTest = thin ? .5 : 0; m.side = thin ? THREE.DoubleSide : THREE.FrontSide; m.envMapIntensity = .8; if (o.material.map) o.material.map.anisotropy = 4; } });
     if (!mp) h.traverse(o => { if (!o.isMesh) return; o.frustumCulled = false; o.castShadow = false; const m0 = o.material; const visor = /Visor/i.test(m0.name || '');
       const m = new THREE.MeshStandardMaterial({ map: m0.map, color: 0xffffff, roughness: visor ? .18 : .62, metalness: visor ? .4 : 0, skinning: true });
       if (!visor) m.onBeforeCompile = sh => { sh.fragmentShader = sh.fragmentShader.replace('#include <map_fragment>', '#ifdef USE_MAP\n vec4 texelColor = texture2D( map, vUv ); texelColor = mapTexelToLinear( texelColor ); float lum = dot(texelColor.rgb, vec3(.299,.587,.114)); texelColor.rgb = mix(vec3(lum), texelColor.rgb, .12) * 1.75 + .07; diffuseColor *= texelColor;\n#endif'); };
@@ -2031,7 +2032,7 @@ float fW(vec2 p){ float v=0.0, a=0.5; for(int k=0;k<4;k++){ v+=a*nW(p); p=p*2.07
   function render() {
     if (SK && SK.skyRT) { renderer.getDrawingBufferSize(skySz); const dv = LITE ? 3 : 2, w = Math.max(64, Math.round(skySz.x / dv)), h = Math.max(64, Math.round(skySz.y / dv)); if (SK.skyRT.width !== w || SK.skyRT.height !== h) SK.skyRT.setSize(w, h); renderer.setRenderTarget(SK.skyRT); renderer.render(SK.skyScene, camera); renderer.setRenderTarget(null); }
     if (quality >= 1 && rt && !LITE) { roadMat.uniforms.uRefl.value = puddleMat.uniforms.uRefl.value = 1; renderReflection(); } else roadMat.uniforms.uRefl.value = puddleMat.uniforms.uRefl.value = 0;
-    if (quality >= 2 && composer) composer.render(); else renderer.render(scene, camera);
+    if (quality >= 2 && composer && !(LITE && T.heaven)) composer.render(); else renderer.render(scene, camera);
   }
   function resize(w, h, dpr) { W = w; H = h; DPR = dpr; renderer.setPixelRatio(dpr); renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
     const rw = Math.max(64, Math.round(w * dpr / 2)), rh = Math.max(64, Math.round(h * dpr / 2)); if (rt) rt.setSize(rw, rh); if (composer) { composer.setPixelRatio(dpr); composer.setSize(w, h); } }
@@ -2121,14 +2122,14 @@ class KRoom {
   if (T.heaven) { const sh1 = View.shake; View.shake = k => sh1(k * .45); }
   const cv = $('#gl'); View.init(cv, T, window.__KGP_GL); if (coarse) { const sh0 = View.shake; View.shake = k => sh0(k * .3); }
   // 画面の処理が限界を超えて描画が止まったら、解像度を下げて読み込み直す
-  cv.addEventListener('webglcontextlost', e => { e.preventDefault(); try { localStorage.setItem('kickgp.rs2', Math.max(.75, (RS || 1) - .25)); } catch (_) { } try { sessionStorage.setItem('kgp.lost', String((+sessionStorage.getItem('kgp.lost') || 0) + 1)); } catch (_) { } setTimeout(() => location.reload(), 400); });
+  cv.addEventListener('webglcontextlost', e => { e.preventDefault(); try { localStorage.setItem('kickgp.rs3', Math.max(.85, (RS || 1) - .1)); } catch (_) { } try { sessionStorage.setItem('kgp.lost', String((+sessionStorage.getItem('kgp.lost') || 0) + 1)); } catch (_) { } setTimeout(() => location.reload(), 400); });
   try { const lost = +sessionStorage.getItem('kgp.lost') || 0; if (lost) console.error('GPU限界で再読み込み ' + lost + '回'); } catch (_) { }
   if (coarse) { const fb = document.getElementById('fpsBadge'); let fc = 0, ft = performance.now(); fb.hidden = false; (function fl(now) { fc++; if (now - ft > 1000) { fb.textContent = Math.round(fc * 1000 / (now - ft)) + 'fps ×' + RS.toFixed(2) + ' q' + View.quality; fc = 0; ft = now; } requestAnimationFrame(fl); })(ft); }
   try { const M = window.KGP_MODELS; if (M && THREE.GLTFLoader) for (const name of Object.keys(M)) { const bin = atob(M[name]), buf = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
       new THREE.GLTFLoader().parse(buf.buffer, '', g => { View.setModel(name, g.scene); window.__kgpModel = (window.__kgpModel || '') + name + ' '; }, e => console.warn('model', name, e)); } } catch (e) { console.warn('model', e); }
   if (T.heaven && THREE.GLTFLoader) { const ld = (u, f) => fetch(u).then(r => r.ok ? r.arrayBuffer() : Promise.reject(r.status)).then(ab => new THREE.GLTFLoader().parse(ab, '', f, e => console.warn('human', u, e))).catch(e => console.warn('human', u, e));
     ld('world/scooter_real.glb', g => View.setScooterReal(g)); ld('world/rider_you.glb', g => View.setHuman(g)); ['ren', 'mika', 'zed'].forEach((n, k) => ld('world/rider_' + n + '.glb', g => View.setRivalHuman(k, g))); }
-  let RS = 1; try { RS = Math.min(1, Math.max(.6, +localStorage.getItem('kickgp.rs2') || 1)); } catch (e) { }
+  let RS = 1; try { RS = Math.min(1, Math.max(.85, +localStorage.getItem('kickgp.rs3') || 1)); } catch (e) { }
   function resize() { const w = cv.clientWidth || innerWidth, h = cv.clientHeight || innerHeight; View.resize(w, h, Math.min(2, window.devicePixelRatio || 1) * RS); }
   addEventListener('resize', resize); resize();
 
@@ -2617,7 +2618,7 @@ class KRoom {
       if (mode === 'race') callout(); else el.call.hidden = true;
       el.vig.style.opacity = (.42 + clamp(car.v / KGP.TUNE.vMax, 0, 1.1) * .4).toFixed(2);
       if (toastT > 0 && (toastT -= dt) <= 0) el.toast.hidden = true; if (flagT > 0 && (flagT -= dt) <= 0) el.flag.hidden = true;
-      if (!save.qLock && (mode === 'race' || (coarse && mode === 'title'))) { fAcc += Math.min(rawDt, .1); fN++; if (fN >= (coarse ? 60 : 90)) { const avg = fAcc / fN; fAcc = fN = 0; if (avg > (coarse ? .022 : .03)) { if (++slow >= 2) { if (RS > .61) { RS = Math.max(.6, RS - .1); try { localStorage.setItem('kickgp.rs2', RS); } catch (e) { } resize(); } else if (View.quality > 0 && !T.heaven) { View.setQuality(View.quality - 1); save.q = View.quality; persist(); } slow = 0; } } else slow = 0; } } }
+      if (!save.qLock && (mode === 'race' || (coarse && mode === 'title'))) { fAcc += Math.min(rawDt, .1); fN++; if (fN >= (coarse ? 60 : 90)) { const avg = fAcc / fN; fAcc = fN = 0; if (avg > (coarse ? .022 : .03)) { if (++slow >= 2) { if (RS > .86) { RS = Math.max(.85, RS - .05); try { localStorage.setItem('kickgp.rs3', RS); } catch (e) { } resize(); } else if (View.quality > 0 && !T.heaven) { View.setQuality(View.quality - 1); save.q = View.quality; persist(); } slow = 0; } } else slow = 0; } } }
     { const ldv = T.line ? T.line[car.idx] : 0, onL = !car.air && car.v > 12 && Math.abs(car.d - ldv) < .75 ? 1 : 0, under = T.theme === 'abyss' && car.y < -2 && mode !== 'title' ? 1 : 0; if (under && !frame.under && mode === 'race') Snd.dive(); frame.under = under;
       Snd.frame(car, inp.throttle, mode === 'race' || mode === 'finish', P.boosting || P.kick > 0, onL, under); }
     { const racing = mode === 'race' || mode === 'count' || mode === 'finish'; if (T.heaven) Snd.heaven(clamp((car.y - 4) / 200, 0, 1), (mode === 'race' || mode === 'finish') && mode !== 'paused'); Snd.music(mode === 'paused' ? .08 : racing ? .4 : .2, racing ? clamp(car.v / 30, 0, 1) * .75 + (P.boosting ? .25 : 0) : .12, racing ? flow / 100 : .2); }
