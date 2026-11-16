@@ -410,6 +410,7 @@ body.heaven .cluster{opacity:.82} body.heaven #map{opacity:.75} body.heaven .toa
     <div class="toast" id="toast" hidden></div>
     <div class="lights" id="lights" hidden><i></i><i></i><i></i><i></i><i></i></div>
     <div class="flag" id="flag" hidden></div>
+    <div id="airTip" hidden style="position:absolute;left:50%;bottom:calc(clamp(120px,36vh,160px) + env(safe-area-inset-bottom,0px));transform:translateX(-50%);font:italic 800 15px/1 Saira,'Hiragino Sans',sans-serif;letter-spacing:.12em;color:#fff;text-shadow:0 2px 10px rgba(0,0,0,.8);pointer-events:none;white-space:nowrap">◀ ▶ はじいて回転</div>
     <div class="cluster" id="cluster">
       <svg viewBox="0 0 240 128" aria-hidden="true"><path class="bgp" d="M4 126 A116 116 0 0 1 236 126 Z"/><path class="tr" d="M22 120 A98 98 0 0 1 218 120"/><path class="rz" id="arcRed" d="M22 120 A98 98 0 0 1 218 120"/><path class="sp" id="arcSpd" d="M22 120 A98 98 0 0 1 218 120"/><path class="gt" d="M37 120 A83 83 0 0 1 203 120"/><path class="gr" id="arcGrip" d="M37 120 A83 83 0 0 1 203 120"/><g id="ticks"></g></svg>
       <div class="c-num num" id="spd">0</div><div class="c-unit">KM/H</div>
@@ -1797,6 +1798,7 @@ const View = (() => {
 
   /* ---- per-frame ---- */
   const cam = { yaw: 0, x: 0, y: 3, z: 0, shake: 0, fov: 66, roll: 0, init: false }; const tmpCol = new THREE.Color(); let groundY = 0, boostVis = 0;
+  let fovK = 0;
   function update(c, weight, dt, time, opt = {}) {
     pose(rider, c, weight, Math.sign(c.steer || 0), opt.fx); groundY = c.air ? KGP.groundAt(T, c.idx, c.d) : c.y; const bst = opt.boost || 0; boostVis += (bst - boostVis) * Math.min(1, dt * 8); trail.material.color.setRGB(1, .12 + boostVis * .6, .08 + boostVis * .25);
     const hx = Math.sin(c.yaw), hz = -Math.cos(c.yaw); trailPos.unshift([c.x - hx * .58, c.y + .22, c.z - hz * .58, hz, -hx]); if (trailPos.length > 9) trailPos.pop();
@@ -1814,7 +1816,7 @@ const View = (() => {
     camera.lookAt(c.x + hx * (2.5 + vr * 4), c.y + .78 + vr * .1, c.z + hz * (2.5 + vr * 4));
     if (T.heaven) { const sl = T.S[c.idx].slope; SK.look = lerp(SK.look || 0, Math.max(0, sl) * 11, Math.min(1, dt * 2)); if (SK.look > .05) camera.lookAt(c.x + hx * (2.5 + vr * 4), c.y + .78 + vr * .1 + SK.look, c.z + hz * (2.5 + vr * 4)); }
     if (T.heaven && SK && SK.cine > 0) heavenCine(c, dt);
-    const fov = (portrait ? 78 : 56) + 21 * vr * vr + Math.max(0, weight) * 4 + boostVis * 17; cam.fov += (fov - cam.fov) * Math.min(1, dt * 4); camera.fov = cam.fov; camera.updateProjectionMatrix();
+    fovK = Math.max(0, fovK - dt * 1.4); const fov = (portrait ? 78 : 56) + 21 * vr * vr + Math.max(0, weight) * 4 + boostVis * 17 + fovK * 16; cam.fov += (fov - cam.fov) * Math.min(1, dt * 4); camera.fov = cam.fov; camera.updateProjectionMatrix();
     stepFx(c, dt);
     for (let k = fwq.length - 1; k >= 0; k--) { const f = fwq[k]; f.t -= dt; if (f.t <= 0) { burst(f.x, f.y, f.z, 60, f.col, 26, 14); fwq.splice(k, 1); } }
   }
@@ -1872,7 +1874,7 @@ const View = (() => {
   const fwq = []; function fireworks(c, n = 5) { const hx = Math.sin(c.yaw), hz = -Math.cos(c.yaw); for (let k = 0; k < n; k++) fwq.push({ t: k * .35 + Math.random() * .2, x: c.x + hx * (18 + Math.random() * 30) + (Math.random() - .5) * 30, y: c.y + 14 + Math.random() * 14, z: c.z + hz * (18 + Math.random() * 30) + (Math.random() - .5) * 30, col: [[1, .83, .42], [.22, .9, .88], [1, .45, .37], [.95, .95, .9]][k % 4] }); }
   function hitSparks(c, n = 26) { burst(c.x + Math.sin(c.yaw) * .6, c.y + .6, c.z - Math.cos(c.yaw) * .6, n, [1, .7, .3], 8, 5); }
   function setSkin(sk) { curSkin = sk; if (!rider || !sk) return; const vis = rider.root.visible; scene.remove(rider.root); rider = makeRider(false, sk.acc, 0x7d8796, false, sk); rider.root.visible = vis; scene.add(rider.root); }
-  return { setHuman, setSkyEvent, setModel, setSkin, fireworks, popEvent, init, resize, update, render, setGhost, setRivals, setRivalNames, setCars, setBoxes, hitSparks, shake, resetCam, setQuality, wallSparks, get quality() { return quality; }, get hasBloom() { return !!composer; } };
+  return { kick: k => { fovK = Math.min(1.3, fovK + k); }, setHuman, setSkyEvent, setModel, setSkin, fireworks, popEvent, init, resize, update, render, setGhost, setRivals, setRivalNames, setCars, setBoxes, hitSparks, shake, resetCam, setQuality, wallSparks, get quality() { return quality; }, get hasBloom() { return !!composer; } };
 })();
 
 const ONLINE = window.KICK_GP_ONLINE || {};
@@ -2345,12 +2347,16 @@ class KRoom {
     if (T.heaven && mode === 'race') { const P2 = R.player;
       if (car.chainT > 0 && (car.chainT -= DT) <= 0) car.chain = 0;
       if (car.air && inp.bst && car.vy < -2.4) car.vy += (-2.4 - car.vy) * .12;
-      if (car.air && car.airT > .15) { if (Math.abs(inp.steer) > .5) car.spin = (car.spin || 0) + Math.sign(inp.steer) * 8.2 * DT; car.trick = true; }
+      { const sg = Math.abs(inp.steer) > .55 ? Math.sign(inp.steer) : 0;
+        if (car.air && car.airT > .12) { if (sg && sg !== car.flk) { car.spinT = (car.spinT || 0) + sg * Math.PI * 2; car.trick = true; } }
+        car.flk = sg; }
+      if (car.air && car.spinT) { const d = car.spinT - (car.spin || 0); car.spin = (car.spin || 0) + Math.sign(d) * Math.min(Math.abs(d), 14 * DT); }
+      { const tip = $('#airTip'); const on = car.air && car.airT > .2 && !car.spinT && car.vy > -14; if (tip.hidden === on) tip.hidden = !on; }
       if (ev.land && car.trick) { const sp = Math.abs(car.spin || 0), n = Math.round(sp / (Math.PI * 2)), off = Math.abs(sp - n * Math.PI * 2);
-        if (n >= 1 && off < .95) { car.chain = (car.chain || 0) + 1; car.chainT = 6; const ch = Math.min(5, car.chain); P2.kick = Math.max(P2.kick, (.6 + .3 * n) * (1 + .3 * (ch - 1))); car.v = Math.min(car.v * (1.04 + .02 * ch), 75); P2.boost = Math.min(1, P2.boost + .18 * n); flow += 12 * n; st.tricks = (st.tricks || 0) + n; Snd.perfect(); flash(.2); buzz([15, 25, 15]); addStyle(450 * n); const gain = (.25 + .15 * n) * (1 + .3 * (ch - 1)); car.gain = (car.gain || 0) + gain; toast(n * 360 + '°' + (car.chain >= 2 ? ' ×' + car.chain : ''), 'g', `+${gain.toFixed(2)}秒　` + (car.chain >= 2 ? car.chain + '連続' : n >= 2 ? 'ダブルスピン' : '一回転'), 1.3, true); }
-        else if (sp > .9) { car.chain = 0; car.v *= .8; car.wobble = .8; Snd.crash(6); car.gain = (car.gain || 0) - .6; toast('BAIL', 'r', '−0.60秒　回りきれなかった', 1.1, true); }
-        car.spin = 0; car.trick = false; }
-      if (!car.air && !ev.land) { car.spin = 0; car.trick = false; } }
+        if (n >= 1 && off < .95) { car.chain = (car.chain || 0) + 1; car.chainT = 6; const ch = Math.min(5, car.chain); P2.kick = Math.max(P2.kick, (.6 + .3 * n) * (1 + .3 * (ch - 1))); car.v = Math.min(car.v * (1.04 + .02 * ch), 75); P2.boost = Math.min(1, P2.boost + .18 * n); flow += 12 * n; st.tricks = (st.tricks || 0) + n; Snd.perfect(); flash(.2); buzz([15, 25, 15]); addStyle(450 * n); View.kick(.55 + .15 * ch); const gain = (.25 + .15 * n) * (1 + .3 * (ch - 1)); car.gain = (car.gain || 0) + gain; toast(n * 360 + '°' + (car.chain >= 2 ? ' ×' + car.chain : ''), 'g', `+${gain.toFixed(2)}秒　` + (car.chain >= 2 ? car.chain + '連続' : n >= 2 ? 'ダブルスピン' : '一回転'), 1.3, true); }
+        else if (sp > .9) { car.chain = 0; car.v *= .8; car.wobble = .8; Snd.crash(6); car.gain = (car.gain || 0) - .6; toast('BAIL', 'r', '−0.60秒　回転の途中で着地', 1.1, true); }
+        car.spin = 0; car.spinT = 0; car.trick = false; }
+      if (!car.air && !ev.land) { car.spin = 0; car.spinT = 0; car.trick = false; } }
     if (ev.block) { flow = Math.max(0, flow - 25); Snd.crash(14); View.shake(1); flash(.25); buzz([50, 30, 50]); toast('HIT', 'r', '', .7, true); }
     if (ev.pad) { Snd.boostOn(); View.shake(.15); addStyle(120); }
     if (ev.scrape && Math.random() < .08) Snd.crash(3);
