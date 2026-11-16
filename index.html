@@ -1011,9 +1011,29 @@ const View = (() => {
     // road + puddles share the reflection shader
     const rtex = roadTex(); roadMat = new THREE.ShaderMaterial({ uniforms: roadU(), vertexShader: ROAD_VS, fragmentShader: ROAD_FS, side: THREE.DoubleSide }); roadMat.uniforms.map.value = rtex;
     if (abyss) { roadMat.uniforms.uTint.value.setRGB(.42, .68, .95); roadMat.uniforms.uWet.value = .7; } if (skyT) { roadMat.uniforms.map.value = T.heaven ? stoneTex(false) : marbleTex(); roadMat.uniforms.uTint.value.setRGB(1, 1, 1); roadMat.uniforms.uWet.value = .28; }
-    { const gs0 = T.gaps; if (T.glass) T.gaps = (T.gaps || []).concat([T.glass]); const segs = solidSegs(); T.gaps = gs0; for (const [a, b] of segs) hideInRefl.push(ribbon(a, b, () => [-hw, 0], () => [hw, 0], roadMat, 0.1)); }
+    const roadPBR = T.heaven ? new THREE.MeshStandardMaterial(Object.assign(pbrT('granite_tile', 3.4, 5), { color: 0xe2ddd4, roughness: 1, metalness: 0, envMapIntensity: .7, side: THREE.DoubleSide })) : null;
+
+    if (roadPBR) roadPBR.onBeforeCompile = sh => {
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP;').replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\n  vWP = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
+varying vec3 vWP;
+float hW(vec2 p){ vec3 p3=fract(vec3(p.xyx)*0.1031); p3+=dot(p3,p3.yzx+33.33); return fract((p3.x+p3.y)*p3.z); }
+float nW(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f); return mix(mix(hW(i),hW(i+vec2(1,0)),f.x),mix(hW(i+vec2(0,1)),hW(i+vec2(1,1)),f.x),f.y); }
+float fW(vec2 p){ float v=0.0, a=0.5; for(int k=0;k<4;k++){ v+=a*nW(p); p=p*2.07+vec2(3.1,1.7); a*=0.5; } return v; }`)
+        .replace('#include <map_fragment>', `#include <map_fragment>
+  vec2 wq = vWP.xz; float eU = clamp(vUv.x / 3.4, 0.0, 1.0); float edge = min(eU, 1.0 - eU);
+  float grime = smoothstep(0.42, 0.78, fW(wq * 0.09));
+  float moss = smoothstep(0.16, 0.0, edge) * smoothstep(0.35, 0.7, fW(wq * 0.6 + 11.0));
+  float pud = smoothstep(0.64, 0.69, fW(wq * 0.045 + 7.0)) * (1.0 - moss) * smoothstep(0.08, 0.2, edge);
+  diffuseColor.rgb *= mix(1.0, 0.7, grime) * (0.92 + 0.16 * nW(wq * 2.3));
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.13, 0.17, 0.07), moss * 0.85);
+  diffuseColor.rgb *= mix(1.0, 0.45, pud);`)
+        .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n  roughnessFactor = mix(roughnessFactor, 0.04, pud); roughnessFactor = mix(roughnessFactor, 1.0, moss);')
+        .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n  normal = normalize(mix(normal, geometryNormal, pud));');
+    };
+    { const gs0 = T.gaps; if (T.glass) T.gaps = (T.gaps || []).concat([T.glass]); const segs = solidSegs(); T.gaps = gs0; for (const [a, b] of segs) { const rm = ribbon(a, b, () => [-hw, 0], () => [hw, 0], roadPBR || roadMat, 0.1); if (roadPBR) rm.geometry.computeVertexNormals(); hideInRefl.push(rm); } }
     if (T.glass) { const g = T.glass;
-      hideInRefl.push(ribbon(g.i0, g.i1, () => [0, 0], () => [hw, 0], roadMat, 0.1));
+      { const rm = ribbon(g.i0, g.i1, () => [0, 0], () => [hw, 0], roadPBR || roadMat, 0.1); if (roadPBR) rm.geometry.computeVertexNormals(); hideInRefl.push(rm); }
       const gc = mkCanvas(128, 256), gx = gc.getContext('2d'); gx.clearRect(0, 0, 128, 256); gx.strokeStyle = 'rgba(220,245,255,.9)'; gx.lineWidth = 3; gx.strokeRect(2, 2, 124, 252); gx.strokeStyle = 'rgba(220,245,255,.35)'; gx.lineWidth = 1; gx.beginPath(); gx.moveTo(64, 0); gx.lineTo(64, 256); gx.stroke();
       const gt = tex(gc, true); gt.repeat.set(1, 1);
       const gm = new THREE.MeshBasicMaterial({ map: gt, color: 0xcfefff, transparent: true, opacity: .55, depthWrite: false, side: THREE.DoubleSide });
@@ -1203,7 +1223,7 @@ const View = (() => {
   function buildSky() {
     const N = T.N, hw = T.halfW; SK = { t: 0, birds: [], birdMesh: null, fall: null, beam: null, gold: null };
     let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9; for (const p of T.S) { x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); z0 = Math.min(z0, p.z); z1 = Math.max(z1, p.z); } const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
-    const LP = c => new THREE.MeshPhongMaterial(Object.assign({ flatShading: true, shininess: 6, specular: 0x111111 }, c)); const IVORY = T.heaven ? new THREE.MeshStandardMaterial({ map: stoneTex(true), color: 0xd2ccc0, roughness: .93, metalness: 0 }) : LP({ color: 0xF4E7C5 }), GOLD = LP({ color: 0xE8B95C, emissive: 0x5a3a08 }), SHADE = LP({ color: 0xd9cdb0 });
+    const LP = c => new THREE.MeshPhongMaterial(Object.assign({ flatShading: true, shininess: 6, specular: 0x111111 }, c)); const IVORY = T.heaven ? new THREE.MeshStandardMaterial({ map: stoneTex(true), color: 0xd2ccc0, roughness: .93, metalness: 0 }) : LP({ color: 0xF4E7C5 }), GOLD = T.heaven ? new THREE.MeshStandardMaterial(Object.assign(pbrT('metal_plate', 2, 2), { color: 0x8a6c40, metalness: .85, roughness: .5, envMapIntensity: 1 })) : LP({ color: 0xE8B95C, emissive: 0x5a3a08 }), SHADE = LP({ color: 0xd9cdb0 });
     const sky = new THREE.Mesh(new THREE.SphereGeometry(2200, 32, 24), new THREE.MeshBasicMaterial({ map: skySkyTex(), side: THREE.BackSide, fog: false, depthWrite: false })); sky.position.set(cx, -60, cz); scene.add(sky); if (T.heaven) { SK.skyU = heavenSkyU(); sky.material = new THREE.ShaderMaterial({ uniforms: SK.skyU, vertexShader: HSKY_VS, fragmentShader: HSKY_FS, side: THREE.BackSide, depthWrite: false, fog: false }); SK.skyMesh = sky; }
     const sun = new THREE.Sprite(new THREE.SpriteMaterial({ map: glow, color: 0xfff4d8, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false })); sun.scale.set(380, 380, 1); sun.position.set(cx + 1100, 420, cz - 1300); SK.sun = sun; scene.add(sun);
     const rays = new THREE.Sprite(new THREE.SpriteMaterial({ map: raysTex(), color: 0xfff0d0, transparent: true, opacity: .25, blending: THREE.AdditiveBlending, depthWrite: false, fog: false })); rays.scale.set(1300, 1300, 1); rays.position.copy(sun.position); scene.add(rays); SK.rays = rays;
@@ -1214,15 +1234,35 @@ const View = (() => {
       const w = 140 + rnd() * 360, far = rad > 1100; sp.scale.set(w, w * .45, 1); sp.position.set(cx + Math.cos(a) * (rad + 150), T.heaven ? -80 + rnd() * 30 : far ? -30 + rnd() * 120 : -58 + rnd() * 40, cz + Math.sin(a) * (rad + 150)); scene.add(sp); hideInRefl.push(sp); }
     // marble rail: gold edges, ivory flanks, floating keel stones underneath
     const gapR = (fa, fb, mat) => { for (const [a, b] of solidSegs()) ribbon(a, b, fa, fb, mat); };
-    gapR(() => [-hw - .25, .02], () => [-hw, .02], basic({ color: 0xE8B95C })); gapR(() => [hw, .02], () => [hw + .25, .02], basic({ color: 0xE8B95C }));
-    gapR(() => [-hw - .25, .02], () => [-hw - .25, -.8], IVORY); gapR(() => [hw + .25, .02], () => [hw + .25, -.8], IVORY); gapR(() => [-hw - .25, -.8], () => [hw + .25, -.8], SHADE);
-    { const pg = new THREE.CylinderGeometry(.09, .12, 1, 6); pg.translate(0, .5, 0); const im = new THREE.InstancedMesh(pg, GOLD, Math.ceil(N / 5) * 2); const m = new THREE.Matrix4(); let k = 0;
+    if (!T.heaven) { gapR(() => [-hw - .25, .02], () => [-hw, .02], basic({ color: 0xE8B95C })); gapR(() => [hw, .02], () => [hw + .25, .02], basic({ color: 0xE8B95C })); }
+    if (!T.heaven) { gapR(() => [-hw - .25, .02], () => [-hw - .25, -.8], IVORY); gapR(() => [hw + .25, .02], () => [hw + .25, -.8], IVORY); gapR(() => [-hw - .25, -.8], () => [hw + .25, -.8], SHADE); }
+    if (!T.heaven) { const pg = new THREE.CylinderGeometry(.09, .12, 1, 6); pg.translate(0, .5, 0); const im = new THREE.InstancedMesh(pg, GOLD, Math.ceil(N / 5) * 2); const m = new THREE.Matrix4(); let k = 0;
       for (let i = 0; i < N; i += 5) { if (T.inGap(i) || T.isOpen(i)) continue; for (const s of [-1, 1]) { const p = P(i, s * (hw + .12), 0); m.makeScale(1, .9, 1); m.setPosition(p[0], p[1], p[2]); im.setMatrixAt(k++, m); } } im.count = k; scene.add(im); }
     { const kg = new THREE.ConeGeometry(1, 1, 6); kg.rotateX(Math.PI); kg.translate(0, -.5, 0); const im = new THREE.InstancedMesh(kg, IVORY, Math.ceil(N / 45)); const m = new THREE.Matrix4(); let k = 0;
       for (let i = 10; i < N; i += 45) { if (T.inGap(i) || T.inGap(i + 10) || T.inGap(i - 10)) continue; const p = P(i, 0, -.8); m.makeScale(4.2, 8 + (i % 3) * 3, 4.2); m.setPosition(p[0], p[1], p[2]); im.setMatrixAt(k++, m); } im.count = k; scene.add(im); }
+    // Blender で作った世界（tools/patch_heaven_world.py）
+    if (T.heaven) {
+      const segsOpen = () => { const out = []; for (const [a, b] of solidSegs()) { let s0 = null; for (let i = a; i <= b; i++) { const bad = T.isOpen(i) || (T.glass && ((i - T.glass.i0 + N) % N) <= ((T.glass.i1 - T.glass.i0 + N) % N)); if (!bad && s0 === null) s0 = i; if ((bad || i === b) && s0 !== null) { if (i - 1 > s0) out.push([s0, bad ? i - 1 : i]); s0 = null; } } } return out; };
+      const rib = (segs, fa, fb, mat, uvs) => { for (const [a, b] of segs) { const m = ribbon(a, b, fa, fb, mat, uvs || .1); m.geometry.computeVertexNormals(); hideInRefl.push(m); } };
+      const stone = new THREE.MeshStandardMaterial(Object.assign(pbrT('granite_tile', 1, 4), { color: 0xc9c2b8, roughness: 1, metalness: 0, envMapIntensity: .6, side: THREE.DoubleSide }));
+      const all = solidSegs();
+      rib(all, () => [-hw - .32, .07], () => [-hw, .07], stone); rib(all, () => [hw, .07], () => [hw + .32, .07], stone);
+      rib(all, () => [-hw - .32, .07], () => [-hw - .32, -.75], stone); rib(all, () => [hw + .32, .07], () => [hw + .32, -.75], stone); rib(all, () => [-hw - .32, -.75], () => [hw + .32, -.75], stone);
+      const LAQ = lacquerMat(); LAQ.side = THREE.DoubleSide; const rails = segsOpen();
+      for (const sd of [-1, 1]) for (const h of [1.0, .55]) { const d = sd * (hw + .12), t = .055;
+        rib(rails, () => [d - t, h + t], () => [d + t, h + t], LAQ); rib(rails, () => [d - t, h - t], () => [d - t, h + t], LAQ); rib(rails, () => [d + t, h - t], () => [d + t, h + t], LAQ); }
+      const WM = {}; const matFor = n => WM[n] || (WM[n] = (() => { const m = n === 'lacquer' ? lacquerMat() : new THREE.MeshStandardMaterial(n === 'bronze' ? { color: 0x6e5c38, metalness: .75, roughness: .38 } : n === 'paper' ? { color: 0xfff3d8, emissive: 0xffc477, emissiveIntensity: .9, roughness: .8 } : n === 'rope' ? { color: 0xb69c66, roughness: .95 } : { color: 0x1f1a16, roughness: .55 }); m.vertexColors = true; return m; })());
+      const place = (url, list) => { if (!THREE.GLTFLoader || !list.length) return; new THREE.GLTFLoader().load(url, g => { g.scene.updateMatrixWorld(true); const up = new THREE.Vector3(0, 1, 0), q = new THREE.Quaternion(), one = new THREE.Vector3(1, 1, 1), pv = new THREE.Vector3(), mm = new THREE.Matrix4();
+        g.scene.traverse(o => { if (!o.isMesh) return; const im = new THREE.InstancedMesh(o.geometry, matFor(o.material.name), list.length); list.forEach((it, k) => { q.setFromAxisAngle(up, it.ry); pv.set(it.p[0], it.p[1], it.p[2]); mm.compose(pv, q, one).multiply(o.matrixWorld); im.setMatrixAt(k, mm); }); im.frustumCulled = false; scene.add(im); hideInRefl.push(im); }); }, undefined, e => console.warn('world', url, e)); };
+      const posts = [], lamps = [];
+      for (const [a, b] of rails) for (let i = a; i <= b; i += 5) { const yaw = -frameAt(i, 0, 0).yaw; for (const sd of [-1, 1]) { posts.push({ p: P(i, sd * (hw + .12), .07), ry: yaw }); if (i % 45 < 5 && ((i / 45 | 0) % 2 ? sd > 0 : sd < 0)) lamps.push({ p: P(i, sd * (hw + .12), .07), ry: yaw + (sd > 0 ? -Math.PI / 2 : Math.PI / 2) }); } }
+      place('world/post.glb', posts); place('world/lantern.glb', lamps);
+      SK.placeTorii = () => place('world/torii.glb', (SK.toriiQ || []).map(g => ({ p: P(g.i, 0, 0), ry: -frameAt(g.i, 0, 0).yaw })));
+    }
     // the line + the gold rails
-    { const lm = add({ color: 0x39E7E0, opacity: .5 }), lg = add({ map: glow, color: 0x39E7E0, opacity: .12 }); gapR(i => [T.line[Math.round(i) % N] - .12, .035], i => [T.line[Math.round(i) % N] + .12, .035], lm); gapR(i => [T.line[Math.round(i) % N] - .6, .03], i => [T.line[Math.round(i) % N] + .6, .03], lg); SK.lineMat = lm; SK.lineGlow = lg;
-      const gm = add({ color: 0xFFD36B, opacity: .9 }); for (const g of T.gold) ribbon(g.i0, g.i1, () => [g.d - .16, .04], () => [g.d + .16, .04], gm); SK.gold = gm; }
+    if (T.heaven) { const bm = new THREE.MeshStandardMaterial({ color: 0xb08850, metalness: .9, roughness: .28, envMapIntensity: 1.3 }); for (const [a, b] of solidSegs()) { const o = ribbon(a, b, i => [T.line[Math.round(i) % N] - .045, .03], i => [T.line[Math.round(i) % N] + .045, .03], bm, .1); if (o && o.geometry) o.geometry.computeVertexNormals(); } }
+    if (!T.heaven) { const lm = add({ color: 0x39E7E0, opacity: .5 }), lg = add({ map: glow, color: 0x39E7E0, opacity: .12 }); gapR(i => [T.line[Math.round(i) % N] - .12, .035], i => [T.line[Math.round(i) % N] + .12, .035], lm); gapR(i => [T.line[Math.round(i) % N] - .6, .03], i => [T.line[Math.round(i) % N] + .6, .03], lg); SK.lineMat = lm; SK.lineGlow = lg; }
+    { const gm = T.heaven ? new THREE.MeshStandardMaterial({ color: 0x8a6c40, metalness: .85, roughness: .4 }) : add({ color: 0xFFD36B, opacity: .9 }); for (const g of T.gold) ribbon(g.i0, g.i1, () => [g.d - .16, .04], () => [g.d + .16, .04], gm); SK.gold = gm; }
     // THE TEMPLE: the course circles a colossal tiered sanctuary
     { const g = new THREE.Group(); g.position.set(T.heaven ? 0 : cx, -40, T.heaven ? 0 : cz); let y = 0;
       for (const [r, h] of [[120, 22], [96, 22], [72, 20]]) { const t = new THREE.Mesh(new THREE.CylinderGeometry(r, r + 6, h, 12), IVORY); t.position.y = y + h / 2; g.add(t); const rim = new THREE.Mesh(new THREE.CylinderGeometry(r + 1.5, r + 1.5, 1.6, 12), GOLD); rim.position.y = y + h; g.add(rim); y += h; }
@@ -1233,37 +1273,54 @@ const View = (() => {
       const beam = new THREE.Mesh(new THREE.CylinderGeometry(7, 14, 900, 16, 1, true), add({ color: 0xfff1c8, opacity: .16 })); beam.position.y = y + 38 + 48 + 450; g.add(beam); SK.beam = beam;
       scene.add(g); g.traverse(o => { if (o.isMesh && o !== beam) hideInRefl.push(o); }); }
     // the temple gate over the start
-    { const i = Math.round(.015 * N), f = frameAt(i, 0, 0); const g = new THREE.Group(); g.position.set(...f.pos); g.rotation.y = -f.yaw;
+    if (T.heaven) (SK.toriiQ = SK.toriiQ || []).push({ i: Math.round(.015 * N) }); else { const i = Math.round(.015 * N), f = frameAt(i, 0, 0); const g = new THREE.Group(); g.position.set(...f.pos); g.rotation.y = -f.yaw;
       for (const s of [-1, 1]) { const pil = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.6, 34, 8), IVORY); pil.position.set(s * (hw + 5), 12, 0); g.add(pil); const cap = new THREE.Mesh(new THREE.BoxGeometry(6, 2.4, 6), GOLD); cap.position.set(s * (hw + 5), 29.5, 0); g.add(cap); }
       const lin = new THREE.Mesh(new THREE.BoxGeometry(2 * (hw + 5) + 12, 3.2, 5), IVORY); lin.position.set(0, 32.5, 0); g.add(lin); const lin2 = new THREE.Mesh(new THREE.BoxGeometry(2 * (hw + 5) + 18, 1.4, 6.5), GOLD); lin2.position.set(0, 35, 0); g.add(lin2);
       const halo = new THREE.Mesh(new THREE.TorusGeometry(9, .5, 8, 40), GOLD); halo.position.set(0, 44, 0); g.add(halo); SK.halo = halo; scene.add(g); }
     // the waterfall island beside the long sweeper
     { const i = T.fall, sp = T.S[i], side = sp.curv > 0 ? -1 : 1, f = frameAt(i, side * (hw + 85), 0); const bx0 = f.pos[0], bz0 = f.pos[2], top = f.pos[1] + 26;
-      const rock = new THREE.Mesh(new THREE.ConeGeometry(40, 70, 7), LP({ color: 0xb8a98a })); rock.rotation.x = Math.PI; rock.position.set(bx0, top - 35, bz0); scene.add(rock);
-      const grass = new THREE.Mesh(new THREE.CylinderGeometry(40, 38, 6, 7), LP({ color: 0x8fd18a })); grass.position.set(bx0, top + 3, bz0); scene.add(grass);
-      for (let k = 0; k < 5; k++) { const tr = new THREE.Mesh(new THREE.ConeGeometry(4, 12, 6), LP({ color: 0x5fb87a })); tr.position.set(bx0 + (rnd() - .5) * 50, top + 12, bz0 + (rnd() - .5) * 50); scene.add(tr); }
+      const rock = new THREE.Mesh(new THREE.ConeGeometry(40, 70, 7), T.heaven ? new THREE.MeshStandardMaterial(Object.assign(pbrT('rock_face_03', 4, 4), { color: 0xcfc6ba, roughness: 1 })) : LP({ color: 0xb8a98a })); rock.rotation.x = Math.PI; rock.position.set(bx0, top - 35, bz0); scene.add(rock);
+      const grass = new THREE.Mesh(new THREE.CylinderGeometry(40, 38, 6, 7), T.heaven ? new THREE.MeshStandardMaterial({ color: 0x5d7a3a, roughness: .95 }) : LP({ color: 0x8fd18a })); grass.position.set(bx0, top + 3, bz0); scene.add(grass);
+      for (let k = 0; k < 5; k++) { const tr = new THREE.Mesh(new THREE.ConeGeometry(4, 12, 6), T.heaven ? new THREE.MeshStandardMaterial({ color: 0x24402a, roughness: .95 }) : LP({ color: 0x5fb87a })); tr.position.set(bx0 + (rnd() - .5) * 50, top + 12, bz0 + (rnd() - .5) * 50); scene.add(tr); }
       const fm = new THREE.MeshBasicMaterial({ map: fallTex(), transparent: true, opacity: .9, depthWrite: false, side: THREE.DoubleSide }); fm.map.repeat.set(1, 3); const fall = new THREE.Mesh(new THREE.PlaneGeometry(22, 160), fm); fall.position.set(bx0 - side * 0, top - 78, bz0); fall.lookAt(sp.x, top - 78, sp.z); fall.translateZ(36); scene.add(fall); SK.fall = fm;
       const mist = new THREE.Sprite(new THREE.SpriteMaterial({ map: glow, color: 0xffffff, transparent: true, opacity: .7, depthWrite: false })); mist.scale.set(120, 60, 1); mist.position.set(fall.position.x, -30, fall.position.z); scene.add(mist); }
     // floating islands all around
     for (let k = 0; k < 9; k++) { const a = rnd() * Math.PI * 2, rad = (T.heaven ? 820 : 520) + rnd() * 700, x = cx + Math.cos(a) * rad, z = cz + Math.sin(a) * rad, y = 20 + rnd() * 160, s = 22 + rnd() * 40;
-      const rock = new THREE.Mesh(new THREE.ConeGeometry(s, s * 1.8, 7), LP({ color: 0xc9b998 })); rock.rotation.x = Math.PI; rock.position.set(x, y - s * .9, z); scene.add(rock);
-      const top = new THREE.Mesh(new THREE.CylinderGeometry(s, s * .95, s * .22, 7), LP({ color: 0x9fd88f })); top.position.set(x, y + s * .1, z); scene.add(top);
-      if (k % 3 === 0) { const t2 = new THREE.Mesh(new THREE.CylinderGeometry(s * .25, s * .3, s * .9, 8), IVORY); t2.position.set(x, y + s * .55, z); scene.add(t2); } }
+      if (T.heaven) { if (!SK.rockMat) SK.rockMat = new THREE.MeshStandardMaterial(Object.assign(pbrT('rock_face_03', 3, 3), { color: 0xcfc6ba, roughness: 1, metalness: 0, envMapIntensity: .6 }));
+        const geo = new THREE.IcosahedronGeometry(s, 3), pa = geo.attributes.position; for (let v = 0; v < pa.count; v++) { let px = pa.getX(v), py = pa.getY(v), pz = pa.getZ(v); const nz = 1 + (Math.sin(px * .21 + k) * Math.cos(pz * .17) + Math.sin(py * .33 + k * 2)) * .12;
+          if (py > s * .15) py = s * .15 + (py - s * .15) * .18; else if (py < 0) { const t = -py / s; py *= 2.1; px *= 1 - t * .72; pz *= 1 - t * .72; } pa.setXYZ(v, px * nz, py, pz * nz); } geo.computeVertexNormals();
+        const rock = new THREE.Mesh(geo, SK.rockMat); rock.position.set(x, y - s * .05, z); rock.rotation.y = rnd() * 6; scene.add(rock); (SK.isl = SK.isl || []).push({ rock, x, y, z, s, ry: rock.rotation.y }); }
+      else { const rock = new THREE.Mesh(new THREE.ConeGeometry(s, s * 1.8, 7), LP({ color: 0xc9b998 })); rock.rotation.x = Math.PI; rock.position.set(x, y - s * .9, z); scene.add(rock);
+      const top = new THREE.Mesh(new THREE.CylinderGeometry(s, s * .95, s * .22, 7), LP({ color: 0x9fd88f })); top.position.set(x, y + s * .1, z); scene.add(top); }
+      if (k % 3 === 0 && !T.heaven) { const t2 = new THREE.Mesh(new THREE.CylinderGeometry(s * .25, s * .3, s * .9, 8), IVORY); t2.position.set(x, y + s * .55, z); scene.add(t2); } }
     // a flock of white birds racing alongside
+    function gullGeo() { const V = { n: [0, .05, -.55], t: [0, .02, .45], rf: [.08, .05, -.15], rb: [.08, .05, .15], ef: [.6, .2, -.1], eb: [.6, .2, .14], tp: [1.25, .02, .24] }, C = { n: .95, t: .95, rf: .95, rb: .95, ef: .86, eb: .82, tp: .18 };
+      const tri = [['n', 'rf', 'rb'], ['n', 'rb', 't'], ['rf', 'ef', 'rb'], ['rb', 'ef', 'eb'], ['ef', 'tp', 'eb']], pos = [], col = [];
+      for (const sx of [1, -1]) for (const t of tri) for (const k of t) { const v = V[k]; pos.push(v[0] * sx, v[1], v[2]); const c = C[k]; col.push(c, c, c * 1.02); }
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.computeVertexNormals(); return g; }
     { const bg = new THREE.BufferGeometry(); bg.setAttribute('position', new THREE.Float32BufferAttribute([-1.2, 0, .3, 0, .15, -.5, 0, 0, .4, 1.2, 0, .3, 0, .15, -.5, 0, 0, .4], 3)); bg.computeVertexNormals();
-      const n = 40, im = new THREE.InstancedMesh(bg, new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide }), n); im.frustumCulled = false; scene.add(im); SK.birdMesh = im;
+      const n = 40, im = new THREE.InstancedMesh(T.heaven ? gullGeo() : bg, T.heaven ? new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: .8, side: THREE.DoubleSide }) : new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide }), n); im.frustumCulled = false; scene.add(im); SK.birdMesh = im;
       for (let k = 0; k < n; k++) SK.birds.push({ off: -14 - rnd() * 22, up: 6 + rnd() * 14, lag: rnd() * 40, ph: rnd() * 7 }); }
     // a golden ring hanging in the sky after the leap
-    { const g = T.rings.find(r => r.up); if (g) { const f = frameAt(g.i, g.d, g.up); const grp = new THREE.Group(); grp.add(new THREE.Mesh(new THREE.TorusGeometry(g.r, .45, 10, 48), GOLD), new THREE.Mesh(new THREE.CircleGeometry(g.r - .2, 40), add({ map: glow, color: 0xffd36b, opacity: .3 }))); grp.position.set(...f.pos); grp.rotation.y = -f.yaw; scene.add(grp); SK.skyRing = grp; } }
-    for (const g of T.rings) { if (g.up) continue; if (g.torii) { buildTorii(g, GOLD); continue; } const f = frameAt(g.i, g.d, g.r + .25), grp = new THREE.Group(); grp.add(new THREE.Mesh(new THREE.TorusGeometry(g.r, .2, 8, 44), GOLD), new THREE.Mesh(new THREE.CircleGeometry(g.r - .1, 40), add({ map: glow, color: 0xffe9a8, opacity: .3 }))); grp.position.set(...f.pos); grp.rotation.y = -f.yaw; scene.add(grp); }
-    { const ag = new THREE.TorusGeometry(hw + 1.4, .07, 6, 32, Math.PI); const am = add({ color: 0xffe2a0, opacity: .75 }); for (let i = 0; i < N; i += 24) { const p = T.S[i]; if (Math.abs(p.curv) > .01 || T.inGap(i) || T.inGap(i + 4)) continue; const f = frameAt(i, 0, 0); const a = new THREE.Mesh(ag, am); a.position.set(...f.pos); a.rotation.y = -f.yaw; scene.add(a); hideInRefl.push(a); } }
-    for (const r of T.ramps) plane((r.i0 - 50 + N) % N, -(hw + 2.5), 4.6, 8, 4, basic({ map: signTex('JUMP', '#E8B95C', '谷を越えろ') }), .7);
+    { const g = T.rings.find(r => r.up); if (g) { const f = frameAt(g.i, g.d, g.up); const grp = new THREE.Group(); grp.add(new THREE.Mesh(new THREE.TorusGeometry(g.r, .45, 10, 48), GOLD)); if (!T.heaven) grp.add(new THREE.Mesh(new THREE.CircleGeometry(g.r - .2, 40), add({ map: glow, color: 0xffd36b, opacity: .3 }))); grp.position.set(...f.pos); grp.rotation.y = -f.yaw; scene.add(grp); SK.skyRing = grp; } }
+    for (const g of T.rings) { if (g.up) continue; if (g.torii) { if (T.heaven) (SK.toriiQ = SK.toriiQ || []).push(g); else buildTorii(g, GOLD); continue; } const f = frameAt(g.i, g.d, g.r + .25), grp = new THREE.Group(); grp.add(new THREE.Mesh(new THREE.TorusGeometry(g.r, .2, 8, 44), GOLD), new THREE.Mesh(new THREE.CircleGeometry(g.r - .1, 40), add({ map: glow, color: 0xffe9a8, opacity: .3 }))); grp.position.set(...f.pos); grp.rotation.y = -f.yaw; scene.add(grp); }
+    if (T.heaven && SK.placeTorii) SK.placeTorii();
+    if (T.heaven && SK.isl && THREE.GLTFLoader) new THREE.GLTFLoader().load('world/island.glb', g => {
+      const IM = {}, mf = n => IM[n] || (IM[n] = (() => { const m = n === 'rock' ? new THREE.MeshStandardMaterial(Object.assign(pbrT('rock_face_03', 6, 6), { color: 0xa8927a, roughness: 1, envMapIntensity: .45 }))
+        : n === 'lacquer' ? lacquerMat() : n === 'stone' ? new THREE.MeshStandardMaterial(Object.assign(pbrT('granite_tile', 2, 2), { color: 0xc9c2b8, roughness: 1 }))
+        : new THREE.MeshStandardMaterial(Object.assign(n === 'grass' ? Object.assign(pbrT('rock_face_03', 14, 14), { map: null }) : {}, { color: { grass: 0x5d7a3a, pine: 0x24402a, bark: 0x4a3424, roof: 0x24201d }[n] || 0x888888, roughness: n === 'roof' ? .6 : .95, envMapIntensity: .5 })); m.vertexColors = true; return m; })());
+      for (const it of SK.isl) { const m = g.scene.clone(true); m.traverse(o => { if (o.isMesh) o.material = mf(o.material.name); }); m.scale.setScalar(it.s * 1.15); m.position.set(it.x, it.y, it.z); m.rotation.y = it.ry; scene.add(m); hideInRefl.push(m); it.rock.visible = false; }
+    }, undefined, e => console.warn('island', e));
+    if (!T.heaven) { const ag = new THREE.TorusGeometry(hw + 1.4, .07, 6, 32, Math.PI); const am = add({ color: 0xffe2a0, opacity: .75 }); for (let i = 0; i < N; i += 24) { const p = T.S[i]; if (Math.abs(p.curv) > .01 || T.inGap(i) || T.inGap(i + 4)) continue; const f = frameAt(i, 0, 0); const a = new THREE.Mesh(ag, am); a.position.set(...f.pos); a.rotation.y = -f.yaw; scene.add(a); hideInRefl.push(a); } }
+    if (!T.heaven) for (const r of T.ramps) plane((r.i0 - 50 + N) % N, -(hw + 2.5), 4.6, 8, 4, basic({ map: signTex('JUMP', '#E8B95C', '谷を越えろ') }), .7);
     // NO RAIL: open edges marked with coral hazard stripes
-    for (const g of T.open) { const i1 = g.i1 < g.i0 ? g.i1 + N : g.i1; ribbon(g.i0, i1, () => [-hw - .02, .03], () => [-hw + .22, .03], basic({ color: 0xFF735E })); ribbon(g.i0, i1, () => [hw - .22, .03], () => [hw + .02, .03], basic({ color: 0xFF735E })); }
+    const STN = T.heaven ? new THREE.MeshStandardMaterial(Object.assign(pbrT('granite_tile', 1, 4), { color: 0xb8b0a4, roughness: 1, side: THREE.DoubleSide })) : null;
+    const rbS = (a, b, fa, fb, m) => { const o = ribbon(a, b, fa, fb, STN || m); if (STN && o && o.geometry) o.geometry.computeVertexNormals(); return o; };
+    if (!T.heaven) for (const g of T.open) { const i1 = g.i1 < g.i0 ? g.i1 + N : g.i1; ribbon(g.i0, i1, () => [-hw - .02, .03], () => [-hw + .22, .03], basic({ color: 0xFF735E })); ribbon(g.i0, i1, () => [hw - .22, .03], () => [hw + .02, .03], basic({ color: 0xFF735E })); }
     // SPLIT walls down the middle
-    for (const g of T.dividers) { const i1 = g.i1 < g.i0 ? g.i1 + N : g.i1; const dm = basic({ color: 0x101C30 }); ribbon(g.i0, i1, () => [-.16, 0], () => [-.16, 1.1], dm); ribbon(g.i0, i1, () => [.16, 0], () => [.16, 1.1], dm); ribbon(g.i0, i1, () => [-.17, .8], () => [-.17, 1.0], basic({ color: 0xFF735E })); ribbon(g.i0, i1, () => [.17, .8], () => [.17, 1.0], basic({ color: 0xFF735E })); ribbon(g.i0, i1, () => [-.17, 1.11], () => [.17, 1.11], basic({ color: 0xFFD36B })); }
+    for (const g of T.dividers) { const i1 = g.i1 < g.i0 ? g.i1 + N : g.i1; const dm = basic({ color: 0x101C30 }); rbS(g.i0, i1, () => [-.16, 0], () => [-.16, 1.1], dm); rbS(g.i0, i1, () => [.16, 0], () => [.16, 1.1], dm); if (!T.heaven) { ribbon(g.i0, i1, () => [-.17, .8], () => [-.17, 1.0], basic({ color: 0xFF735E })); ribbon(g.i0, i1, () => [.17, .8], () => [.17, 1.0], basic({ color: 0xFF735E })); } rbS(g.i0, i1, () => [-.17, 1.11], () => [.17, 1.11], basic({ color: 0xFFD36B })); }
     // boost pads: cyan chevrons on the deck
-    { const pt = padTex(); for (const g of T.pads) { const pg = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 4.2), new THREE.MeshBasicMaterial({ map: pt, color: 0x13b8c4, transparent: true, depthWrite: false })); const f = frameAt(g.i, g.d, .04); pg.position.set(...f.pos); pg.rotation.set(-Math.PI / 2, -f.yaw, 0, 'YXZ'); scene.add(pg); hideInRefl.push(pg); } }
+    { const pt = padTex(); for (const g of T.pads) { const pg = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 4.2), (T.heaven ? new THREE.MeshStandardMaterial({ map: pt, color: 0xc9a060, metalness: .9, roughness: .3, transparent: true, opacity: .85, depthWrite: false, envMapIntensity: 1.2 }) : new THREE.MeshBasicMaterial({ map: pt, color: 0x13b8c4, transparent: true, depthWrite: false }))); const f = frameAt(g.i, g.d, .04); pg.position.set(...f.pos); pg.rotation.set(-Math.PI / 2, -f.yaw, 0, 'YXZ'); scene.add(pg); hideInRefl.push(pg); } }
     // moving walls
     SK.blocks = T.blocks.map(b => { const g = new THREE.Group(); const body = new THREE.Mesh(new THREE.BoxGeometry(2.0, 2.2, .8), new THREE.MeshToonMaterial({ color: 0x101C30, gradientMap: gradTex() })); body.position.y = 1.1; g.add(body);
       for (const y of [.45, 1.1, 1.75]) { const st = new THREE.Mesh(new THREE.BoxGeometry(2.04, .22, .84), basic({ color: 0xFF735E })); st.position.y = y; g.add(st); } const top = new THREE.Mesh(new THREE.BoxGeometry(2.04, .1, .84), basic({ color: 0xFFD36B })); top.position.y = 2.22; g.add(top); inkOutline(g, 1.05); scene.add(g); return { b, g }; });
@@ -1272,6 +1329,8 @@ const View = (() => {
   /* ---- HEAVEN ASCENT: 1周で1日が過ぎる空。新海誠風の空・雲の層・鳥居・天の門 ---- */
   const HSKY_VS = `varying vec3 vW; void main(){ vec4 wp=modelMatrix*vec4(position,1.0); vW=wp.xyz; gl_Position=projectionMatrix*viewMatrix*wp; }`;
   const SKY_COMMON = `uniform vec3 uZen; uniform vec3 uMid; uniform vec3 uHor; uniform vec3 uBelow; uniform vec3 uSun; uniform vec3 uSunDir; uniform vec3 uCloudLit; uniform vec3 uCloudShade; uniform float uCover; uniform float uStars; uniform float uTime;
+    uniform sampler2D uSkyA; uniform sampler2D uSkyB; uniform float uSkyMix; uniform float uSkyRotA; uniform float uSkyRotB; uniform float uSkyOn;
+    vec3 skyPhoto(sampler2D t, vec3 d, float rot){ float ph = atan(d.z, d.x); vec2 uv = vec2(fract((ph + rot) / 6.2831853), clamp(asin(clamp(d.y, -1.0, 1.0)) / 3.1415927 + 0.5, 0.002, 0.998)); vec3 c = texture2D(t, uv).rgb; return pow(c, vec3(2.0)); }
     uniform float uRainbow; uniform float uAurora; uniform float uComet; uniform vec3 uRbDir; uniform vec3 uCometDir; uniform vec3 uMoonDir; uniform float uExposure; uniform vec3 uGalN; uniform vec3 uGalC; uniform float uVolQ; uniform float uLite; varying vec3 vW;
     const float PI=3.141592653589793; const vec3 totalRayleigh=vec3(5.804542996261093E-6,1.3562911419845635E-5,3.0265902468824876E-5); const vec3 MieConst=vec3(1.8399918514433978E14,2.7798023919660528E14,4.0790479543861094E14);
     float h1(vec2 p){ vec3 p3=fract(vec3(p.xyx)*0.1031); p3+=dot(p3,p3.yzx+33.33); return fract((p3.x+p3.y)*p3.z); }
@@ -1305,7 +1364,7 @@ const View = (() => {
         t+=sl; }
       return mix(col,col*T+acc,exp(-t0*0.00009)*smoothstep(0.015,0.08,d.y)); }
     vec3 skyCol(vec3 d, float sk){ float y=d.y, yy=max(y,0.0); vec3 sd=normalize(uSunDir);
-      vec3 col=aces(atmos(d,sd)*uExposure);
+      vec3 col = uSkyOn > 0.5 ? mix(skyPhoto(uSkyA, d, uSkyRotA), skyPhoto(uSkyB, d, uSkyRotB), uSkyMix) * 1.15 : aces(atmos(d,sd)*uExposure);
       float night=smoothstep(0.03,-0.2,sd.y);
       // 夜空の地色（地平線ほど明るい青、天頂は深い藍）
       vec3 nc=mix(vec3(0.06,0.13,0.34),vec3(0.008,0.02,0.075),pow(clamp(y,0.0,1.0),0.42));
@@ -1316,7 +1375,7 @@ const View = (() => {
       // 黄道光：沈んだ太陽の方角から立ちのぼる淡い光の柱
       nc+=vec3(0.55,0.5,0.72)*pow(az,10.0)*exp(-yy*3.0)*smoothstep(-0.12,-0.3,sd.y)*0.12;
       col=mix(col,nc,night); float vis=night*smoothstep(-0.02,0.16,y);
-      if(vis>0.002 && (sk>0.5 || uLite<0.5)){
+      if(vis>0.002 && (sk>0.5 || uLite<0.5) && uSkyOn < 0.5){
       // 天の川
       vec3 G=normalize(uGalN); vec3 gc=normalize(uGalC-G*dot(uGalC,G)); vec3 gx=normalize(cross(G,gc));
       float gb=dot(d,G); float gl=atan(dot(d,gx),dot(d,gc)); float ca=acos(clamp(dot(normalize(d-G*gb+vec3(1e-5)),gc),-1.0,1.0));
@@ -1355,7 +1414,7 @@ const View = (() => {
   const HSKY_FS = SKY_COMMON + `
     void main(){ vec3 sc0=skyCol(normalize(vW-cameraPosition),1.0); gl_FragColor=vec4(clamp(sc0,0.0,48.0),1.0); }`;
   const heavenSkyU = () => ({ uZen: { value: new THREE.Color() }, uMid: { value: new THREE.Color() }, uHor: { value: new THREE.Color() }, uBelow: { value: new THREE.Color() }, uSun: { value: new THREE.Color() }, uSunDir: { value: new THREE.Vector3(0, .5, -1) },
-    uCloudLit: { value: new THREE.Color(1, 1, 1) }, uCloudShade: { value: new THREE.Color(.5, .6, .9) }, uCover: { value: .45 }, uStars: { value: 0 }, uTime: { value: 0 }, uRainbow: { value: 0 }, uAurora: { value: 0 }, uComet: { value: 0 }, uRbDir: { value: new THREE.Vector3(0, -.1, -1) }, uCometDir: { value: new THREE.Vector3(0, .6, -1) }, uMoonDir: { value: new THREE.Vector3(.3, .35, -.9).normalize() }, uExposure: { value: .62 }, uGalN: { value: new THREE.Vector3(.35, .55, -.76).normalize() }, uGalC: { value: new THREE.Vector3(.62, .2, .76).normalize() }, uVolQ: { value: 1 }, uLite: { value: LITE ? 1 : 0 } });
+    uSkyA: { value: null }, uSkyB: { value: null }, uSkyMix: { value: 0 }, uSkyRotA: { value: 0 }, uSkyRotB: { value: 0 }, uSkyOn: { value: 0 }, uCloudLit: { value: new THREE.Color(1, 1, 1) }, uCloudShade: { value: new THREE.Color(.5, .6, .9) }, uCover: { value: .45 }, uStars: { value: 0 }, uTime: { value: 0 }, uRainbow: { value: 0 }, uAurora: { value: 0 }, uComet: { value: 0 }, uRbDir: { value: new THREE.Vector3(0, -.1, -1) }, uCometDir: { value: new THREE.Vector3(0, .6, -1) }, uMoonDir: { value: new THREE.Vector3(.3, .35, -.9).normalize() }, uExposure: { value: .62 }, uGalN: { value: new THREE.Vector3(.35, .55, -.76).normalize() }, uGalC: { value: new THREE.Vector3(.62, .2, .76).normalize() }, uVolQ: { value: 1 }, uLite: { value: LITE ? 1 : 0 } });
   // 時間帯（コースの進み具合 0→1 で、1周＝1日）
   const HZ = [
     { f: 0,   zen: 0x1f5fd0, mid: 0x4a9bef, hor: 0xd4ecfc, sun: 0xfff3dc, el: 48, az: 200, sunI: 1.0, fog: 0xcfe6fb, amb: 0xa8c4ff, gnd: 0xe8d8c8, shade: 0x98a3bf, cover: .42, stars: 0 },
@@ -1383,7 +1442,9 @@ const View = (() => {
     for (let i = 0; i < 2600; i++) { x.fillStyle = `rgba(${rnd() < .5 ? '255,140,110' : '60,15,8'},${.05 + rnd() * .1})`; x.fillRect(rnd() * 128, rnd() * 512, 1, 1 + rnd() * 3); }
     for (let i = 0; i < 40; i++) { x.fillStyle = `rgba(50,30,25,${.25 + rnd() * .4})`; x.beginPath(); x.ellipse(rnd() * 128, rnd() * 512, .6 + rnd() * 2.2, .5 + rnd() * 1.6, rnd() * 3, 0, 7); x.fill(); }
     return tex(c, true); }
-  const lacquerMat = () => new THREE.MeshStandardMaterial({ map: lacquerTex(), color: 0xffffff, roughness: .42, metalness: 0 });
+  const PBRL = new THREE.TextureLoader();
+  const pbrT = (n, rx, ry) => { const f = k => { const t = PBRL.load('tex/' + n + '_' + k + '.jpg'); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry); t.anisotropy = 4; return t; }; return { map: f('diff'), normalMap: f('nor'), roughnessMap: f('rough') }; };
+  const lacquerMat = () => new THREE.MeshStandardMaterial(Object.assign(pbrT('red_plaster_weathered', 1, 2), { color: 0xffc2b4, roughness: 1, metalness: 0, envMapIntensity: .9 }));
   function buildTorii(g, GOLD) {
     const hw = T.halfW, f = frameAt(g.i, 0, 0), grp = new THREE.Group(), w = hw + 1.0, H = 7.2;
     const RED = lacquerMat(), BLK = new THREE.MeshStandardMaterial({ color: 0x24201d, roughness: .62, metalness: 0 });
@@ -1465,24 +1526,31 @@ const View = (() => {
     camera.position.lerp(sunV, w * .9); camera.up.set(0, 1, 0); camera.lookAt(c.x + hx * 6, c.y + 3.5, c.z + hz * 6);
   }
   const OCEAN_FS = SKY_COMMON + `
-    uniform float uCalm; uniform vec3 fogColor; uniform float fogDensity;
+    uniform float uCalm; uniform vec3 fogColor; uniform float fogDensity; uniform sampler2D uWN;
     vec2 wv(vec2 p, vec2 dir, float k, float a, float sp){ float ph=dot(p,dir)*k+uTime*sp; return dir*(a*k*cos(ph)); }
     void main(){ vec2 p=vW.xz; vec3 V=normalize(cameraPosition-vW); float dist=length(cameraPosition-vW); float fade=exp(-dist/900.0); float amp=mix(1.0,0.32,uCalm);
       vec2 g=(wv(p,normalize(vec2(1.0,0.3)),0.045,1.1,0.8)+wv(p,normalize(vec2(-0.4,1.0)),0.07,0.6,1.1)+wv(p,normalize(vec2(0.8,-0.6)),0.13,0.25,1.6))*amp;
       g+=(wv(p,normalize(vec2(0.2,1.0)),0.31,0.08,2.4)+wv(p,normalize(vec2(-1.0,0.15)),0.53,0.04,3.1))*fade*amp;
-      float e=0.5, a0=n2(p*0.9+uTime*0.3), a1=n2((p+vec2(e,0.0))*0.9+uTime*0.3), a2=n2((p+vec2(0.0,e))*0.9+uTime*0.3); g+=vec2(a1-a0,a2-a0)/e*0.2*fade*amp;
+      vec2 tw=uTime*vec2(0.011,0.007); vec2 wa=texture2D(uWN,p*0.0045+tw*0.35).rg*2.0-1.0, wb=texture2D(uWN,p*0.019-tw*1.3+vec2(0.31,0.67)).rg*2.0-1.0, wc=texture2D(uWN,p*0.061+tw*2.1+vec2(0.71,0.13)).rg*2.0-1.0;
+      float near=exp(-dist/350.0); g+=(wa*0.32+wb*0.26*fade+wc*0.2*near)*amp;
       vec3 N=normalize(vec3(-g.x,1.0,-g.y)); vec3 R=reflect(-V,N); R.y=abs(R.y)+0.002; R=normalize(R);
       vec3 refl=skyCol(R,0.18); float fres=(0.02+0.98*pow(1.0-max(dot(N,V),0.0),5.0))*0.62;
       float night=smoothstep(0.03,-0.2,normalize(uSunDir).y); vec3 deep=mix(vec3(0.0,0.05,0.085),vec3(0.002,0.007,0.022),night);
       vec3 col=mix(deep,refl,clamp(fres*1.1,0.0,1.0));
+      vec3 Ls=normalize(uSunDir); float rs=max(dot(R,Ls),0.0); float day=1.0-night, low=1.0-smoothstep(0.05,0.6,Ls.y);
+      vec3 sunC=mix(vec3(1.0,0.95,0.86),vec3(1.0,0.62,0.32),low);
+      col+=sunC*(pow(rs,1400.0)*28.0+pow(rs,160.0)*1.4+pow(rs,18.0)*0.12*low)*day;   // 太陽のきらめきと光の道
+      vec3 Lm=normalize(uMoonDir); col+=vec3(0.75,0.82,1.0)*(pow(max(dot(R,Lm),0.0),900.0)*6.0+pow(max(dot(R,Lm),0.0),60.0)*0.15)*night;
+      float crest=clamp(dot(g,normalize(vec2(1.0,0.3)))*0.9+0.15,0.0,1.0); col+=vec3(0.0,0.11,0.1)*crest*crest*day*fade*(1.0-fres);   // 波の頂が透ける
       float f=1.0-exp(-fogDensity*fogDensity*dist*dist); gl_FragColor=vec4(mix(col,fogColor,clamp(f,0.0,1.0)*0.85),1.0); }`;
   function buildOcean() {
-    const u = Object.assign({}, SK.skyU, { uCalm: { value: 0 }, fogColor: { value: new THREE.Color() }, fogDensity: { value: .0008 } });   // 空と同じ値を共有して、海に空を映す
+    const wn = new THREE.TextureLoader().load('tex/waternormals.jpg'); wn.wrapS = wn.wrapT = THREE.RepeatWrapping; wn.anisotropy = 8;
+    const u = Object.assign({}, SK.skyU, { uWN: { value: wn }, uCalm: { value: 0 }, fogColor: { value: new THREE.Color() }, fogDensity: { value: .0008 } });   // 空と同じ値を共有して、海に空を映す
     const m = new THREE.Mesh(new THREE.PlaneGeometry(40000, 40000, 1, 1).rotateX(-Math.PI / 2), new THREE.ShaderMaterial({ uniforms: u, vertexShader: CLOUD_VS, fragmentShader: OCEAN_FS }));
     m.position.y = 0; scene.add(m); hideInRefl.push(m); SK.oceanU = u; SK.ocean = m;
     // 遠くの岩の小島（昇るほど小さくなっていく目印）
-    const RK = new THREE.MeshPhongMaterial({ color: 0x1a1c24, shininess: 4, flatShading: true });
-    for (let k = 0; k < 9; k++) { const a = rnd() * Math.PI * 2, r = 900 + rnd() * 1600, w = 30 + rnd() * 70; const g = new THREE.Mesh(new THREE.DodecahedronGeometry(w, 0), RK); g.scale.set(1.6, .45 + rnd() * .3, 1); g.position.set(Math.cos(a) * r, w * .12, Math.sin(a) * r); g.rotation.y = rnd() * 6; scene.add(g); hideInRefl.push(g); }
+    const RK = new THREE.MeshStandardMaterial(Object.assign(pbrT('rock_face_03', 3, 3), { color: 0x6a645c, roughness: .9, envMapIntensity: .5 }));
+    for (let k = 0; k < 9; k++) { const a = rnd() * Math.PI * 2, r = 900 + rnd() * 1600, w = 30 + rnd() * 70; const geo = new THREE.IcosahedronGeometry(w, 3), pa = geo.attributes.position; for (let v = 0; v < pa.count; v++) { const px = pa.getX(v), py = pa.getY(v), pz = pa.getZ(v), q = 1 + (Math.sin(px * .19 + k) * Math.cos(pz * .23) + Math.sin(py * .31 + k)) * .14; pa.setXYZ(v, px * q, py * q, pz * q); } geo.computeVertexNormals(); const g = new THREE.Mesh(geo, RK); g.scale.set(1.6, .45 + rnd() * .3, 1); g.position.set(Math.cos(a) * r, w * .12, Math.sin(a) * r); g.rotation.y = rnd() * 6; scene.add(g); hideInRefl.push(g); }
   }
   function buildLifts(GOLD) {
     SK.lifts = []; const hw = T.halfW;
@@ -1555,6 +1623,8 @@ const View = (() => {
     if (SK.skyMesh) { scene.remove(SK.skyMesh); SK.skyScene = new THREE.Scene(); SK.skyScene.add(SK.skyMesh); SK.skyRT = new THREE.WebGLRenderTarget(2, 2, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat, depthBuffer: false }); scene.background = SK.skyRT.texture; }
     { const bt = mkCanvas(64, 64), bx = bt.getContext('2d'), g = bx.createRadialGradient(32, 32, 0, 32, 32, 32); g.addColorStop(0, 'rgba(0,0,0,.75)'); g.addColorStop(.55, 'rgba(0,0,0,.35)'); g.addColorStop(1, 'rgba(0,0,0,0)'); bx.fillStyle = g; bx.fillRect(0, 0, 64, 64);
       SK.blob = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: tex(bt), transparent: true, depthWrite: false, color: 0xffffff })); SK.blob.renderOrder = 3; scene.add(SK.blob); hideInRefl.push(SK.blob); } camera.updateProjectionMatrix(); if (SK.skyMesh) SK.skyMesh.renderOrder = -1;
+    if (DL && renderer) { renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; DL.castShadow = true; DL.shadow.mapSize.set(1024, 1024);
+      const sc = DL.shadow.camera; sc.left = -7; sc.right = 7; sc.top = 7; sc.bottom = -7; sc.near = 1; sc.far = 90; sc.updateProjectionMatrix(); DL.shadow.bias = -.0006; DL.shadow.normalBias = .03; scene.add(DL.target); SK.rcv = 0; }
     // 雲の層：昇る途中で2回、雲を突き抜ける
     SK.layers = [];
     SK.layerY = [62, 132, 285]; for (const [y, cover, seed] of [[62, .4, 3.1], [132, .36, 7.7], [285, .28, 1.9]]) {
@@ -1572,12 +1642,12 @@ const View = (() => {
       const nuki = new THREE.Mesh(new THREE.BoxGeometry(2 * (hw + 3) * 1.25 + 3 * k, .4 * k, .5 * k), RED); nuki.position.y = 7.2 * k; g.add(nuki);
       const halo = new THREE.Mesh(new THREE.TorusGeometry(7 * k, .25 * k, 10, 64), new THREE.MeshBasicMaterial({ color: 0xffe6a0 })); halo.position.y = 9 * k + 7 * k; g.add(halo); SK.gateHalo = halo;
       const glowS = new THREE.Sprite(new THREE.SpriteMaterial({ map: glow, color: 0xfff0c8, transparent: true, opacity: .9, blending: THREE.AdditiveBlending, depthWrite: false, fog: false })); glowS.scale.set(60, 60, 1); glowS.position.y = 9 * k + 7 * k; g.add(glowS);
-      const col = new THREE.Mesh(new THREE.CylinderGeometry(3, 6, 1400, 20, 1, true), add({ color: 0xfff1c8, opacity: .13 })); col.position.y = 700; g.add(col); SK.gateCol = col;
+      const col = new THREE.Mesh(new THREE.CylinderGeometry(3, 6, 1400, 20, 1, true), add({ color: 0xfff1c8, opacity: .13 })); col.position.y = 700; g.add(col); SK.gateCol = col; halo.visible = false; col.visible = false; glowS.material.opacity = .35;
       g.position.set(...f.pos); g.rotation.y = -f.yaw; scene.add(g); g.traverse(o => { if (o.isMesh) hideInRefl.push(o); }); }
     // 光の粒（金の塵）：カメラのまわりを漂う
     { const n = 420, pos = new Float32Array(n * 3); for (let k = 0; k < n; k++) { pos[k * 3] = (rnd() - .5) * 120; pos[k * 3 + 1] = (rnd() - .5) * 60; pos[k * 3 + 2] = (rnd() - .5) * 120; }
       const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-      const m = new THREE.PointsMaterial({ map: glow, color: 0xffe2a0, size: .22, transparent: true, opacity: .7, blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true });
+      const m = new THREE.PointsMaterial({ map: glow, color: 0xfff6e8, size: .08, transparent: true, opacity: .35, blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true });
       const pts = new THREE.Points(g, m); pts.frustumCulled = false; scene.add(pts); hideInRefl.push(pts); SK.motes = { pts, pos, n }; }
   }
   // ---- 空ガチャ：このレースで起きる空の出来事 ----
@@ -1592,7 +1662,7 @@ const View = (() => {
     const hx = Math.sin(c.yaw), hz = -Math.cos(c.yaw);
     if (win('rainbow') > 0 && !SK.rbSet) { SK.rbSet = true; U.uRbDir.value.set(hx, -.12, hz).normalize(); } if (win('rainbow') === 0) SK.rbSet = false;
     if (win('comet') > 0 && !SK.cmSet) { SK.cmSet = true; U.uCometDir.value.set(hx * .85 - hz * .3, .36, hz * .85 + hx * .3).normalize(); } if (win('comet') === 0) SK.cmSet = false;
-    U.uRainbow.value = win('rainbow'); U.uAurora.value = win('aurora'); U.uComet.value = win('comet');
+    U.uRainbow.value = T.heaven ? 0 : win('rainbow'); U.uAurora.value = win('aurora'); U.uComet.value = win('comet');
     for (const k in skyEv) if (!skyEv[k].seen && win(k) > .6) { skyEv[k].seen = true; events.push('sky:' + k); }
     // 流れ星
     if (!SK.met) { SK.met = []; const mt = meteorTex(); for (let k = 0; k < 8; k++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: mt, color: 0xcfe6ff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, opacity: 0 })); sp.scale.set(5, 150, 1); scene.add(sp); hideInRefl.push(sp); SK.met.push({ sp, life: 0, v: new THREE.Vector3() }); } }
@@ -1610,6 +1680,15 @@ const View = (() => {
       if (m.side === THREE.BackSide && m.color && m.color.getHex() < 0x202020) { o.visible = false; return; }
       if (m.isMeshToonMaterial) { const glossy = m.color.getHSL({}).l > .8; o.material = new THREE.MeshStandardMaterial({ color: m.color, map: m.map || null, roughness: glossy ? .32 : .68, metalness: .02 }); } });
     root.userData.real = true; }
+  // 背景の空の写真（Poly Haven / Qwantani）：1周の進み具合で切り替え、太陽の向きをゲームに合わせて回す
+  const SKYP = { list: [['noon', 3.7721], ['late_afternoon', 3.7721], ['sunset', 3.769], ['night', 3.769], ['dawn', 3.7444]], tex: {}, ok: false };
+  const SKYK = [[0, 'noon'], [.16, 'noon'], [.24, 'late_afternoon'], [.31, 'sunset'], [.39, 'night'], [.58, 'night'], [.66, 'dawn'], [.76, 'noon'], [1.01, 'noon']];
+  function skyPhotoInit(U) { if (SKYP.ok || SKYP.loading) return; SKYP.loading = true; let n = 0; const ld = new THREE.TextureLoader();
+    for (const [k] of SKYP.list) ld.load('sky/' + k + '.jpg', t => { t.minFilter = THREE.LinearFilter; t.magFilter = THREE.LinearFilter; t.generateMipmaps = false; t.wrapS = THREE.RepeatWrapping; SKYP.tex[k] = t; try { if (!SKYP.pm) SKYP.pm = new THREE.PMREMGenerator(renderer); SKYP.env = SKYP.env || {}; SKYP.env[k] = SKYP.pm.fromEquirectangular(t).texture; } catch (e) { } if (++n === SKYP.list.length) { SKYP.ok = true; } }, undefined, () => { SKYP.fail = true; }); }
+  function skyPhotoTick(c, U) { skyPhotoInit(U); if (!SKYP.ok) { U.uSkyOn.value = 0; return; } const f = ((c.idx / T.N) % 1 + 1) % 1; let a = SKYK[0], b = SKYK[1];
+    for (let k = 0; k < SKYK.length - 1; k++) if (f >= SKYK[k][0] && f < SKYK[k + 1][0]) { a = SKYK[k]; b = SKYK[k + 1]; break; }
+    const m = a[1] === b[1] ? 0 : (f - a[0]) / (b[0] - a[0]), sm = m * m * (3 - 2 * m), sd = U.uSunDir.value, gaz = Math.atan2(sd.z, sd.x), az = k => SKYP.list.find(o => o[0] === k)[1];
+    U.uSkyA.value = SKYP.tex[a[1]]; U.uSkyB.value = SKYP.tex[b[1]]; U.uSkyMix.value = sm; U.uSkyRotA.value = az(a[1]) - gaz; U.uSkyRotB.value = az(b[1]) - gaz; U.uSkyOn.value = 1; if (SKYP.env) { const ek = sm < .5 ? a[1] : b[1]; if (SKYP.env[ek] && scene.environment !== SKYP.env[ek]) scene.environment = SKYP.env[ek]; } }
   function heavenTick(c, dt, time) {
     const U = SK.skyU; if (!U) return; SK.skyMesh.position.copy(camera.position);   // 空は常にカメラ中心（遠くが切れないように）
     // コースの進み具合（なめらかに追う）
@@ -1618,7 +1697,7 @@ const View = (() => {
     hmix(A.zen, B.zen, t, U.uZen.value); hmix(A.mid, B.mid, t, U.uMid.value); hmix(A.hor, B.hor, t, U.uHor.value); hmix(A.sun, B.sun, t, U.uSun.value);
     hmix(A.fog, B.fog, t, U.uBelow.value); U.uBelow.value.lerp(U.uHor.value, .4); hmix(A.shade, B.shade, t, U.uCloudShade.value);
     U.uCloudLit.value.setRGB(1, 1, 1).lerp(U.uSun.value, .25); U.uCover.value = lerp(A.cover, B.cover, t); U.uStars.value = lerp(A.stars, B.stars, t); U.uTime.value = time;
-    skyEvents(c, dt, time, f, U); U.uVolQ.value = quality >= 2 ? 1 : 0;
+    skyEvents(c, dt, time, f, U); skyPhotoTick(c, U); U.uVolQ.value = quality >= 2 ? 1 : 0;
     if (T.twist && T.twist.k === 'MIST') U.uCover.value = Math.min(.9, U.uCover.value + .18);
     const el = lerp(A.el, B.el, t) * Math.PI / 180; let daz = B.az - A.az; if (daz > 180) daz -= 360; if (daz < -180) daz += 360; const az = (A.az + daz * t) * Math.PI / 180;
     U.uSunDir.value.set(Math.cos(el) * Math.sin(az), Math.sin(el), Math.cos(el) * Math.cos(az));
@@ -1631,7 +1710,7 @@ const View = (() => {
     for (const m of [roadMat, puddleMat]) { if (m) { m.uniforms.fogColor.value.copy(scene.fog.color); m.uniforms.fogDensity.value = scene.fog.density; } }
     SK.cu.fogColor.value.copy(scene.fog.color);
     if (HL) { hmix(A.amb, B.amb, t, HL.color); hmix(A.gnd, B.gnd, t, HL.groundColor); HL.intensity = lerp(.85, 1.15, Math.max(0, Math.sin(el + .2))); }
-    if (DL) { if (nightF > .5) { DL.color.setRGB(.7, .78, 1); DL.intensity = .45; DL.position.copy(U.uMoonDir.value).multiplyScalar(10); } else { DL.color.copy(U.uSun.value); DL.intensity = Math.max(.25, lerp(A.sunI, B.sunI, t)); DL.position.copy(U.uSunDir.value).multiplyScalar(10).setY(Math.max(1.5, U.uSunDir.value.y * 10)); } }
+    if (DL) { if (nightF > .5) { DL.color.setRGB(.7, .78, 1); DL.intensity = .45; DL.position.copy(U.uMoonDir.value).multiplyScalar(10); } else { DL.color.copy(U.uSun.value); DL.intensity = Math.max(.25, lerp(A.sunI, B.sunI, t)); DL.position.copy(U.uSunDir.value).multiplyScalar(10).setY(Math.max(1.5, U.uSunDir.value.y * 10)); } SK.sunV = (SK.sunV || new THREE.Vector3()).copy(DL.position).normalize(); }
     if (SK.sun) { SK.sun.position.copy(camera.position).addScaledVector(U.uSunDir.value, 1900); SK.sun.material.color.copy(U.uSun.value); SK.sun.material.opacity = el > -.05 ? 1 : .35; }
     if (SK.rays) { SK.rays.position.copy(SK.sun.position); SK.rays.material.color.copy(U.uSun.value); }
     for (const u of SK.layers) { u.uTime.value = time; u.fogColor.value.copy(scene.fog.color); u.uLit.value.copy(U.uCloudLit.value); u.uShade.value.copy(U.uCloudShade.value); }
@@ -1650,7 +1729,9 @@ const View = (() => {
     SK.prevIdx = c.idx; if (SK.cine > 0) SK.cine -= dt;
     liftsTick(time, dt); whaleTick(c, time, dt); if (SK.wires) for (const w of SK.wires) w.material.opacity = .12 + .08 * Math.sin(time * 7);
     if (rider && !rider.root.userData.real) realify(rider.root); for (const rv of rivals) if (rv && rv.root && !rv.root.userData.real) realify(rv.root);
-    if (SK.blob) { const gy = KGP.groundAt(T, c.idx, c.d), hgt = Math.max(0, c.y - gy); SK.blob.position.set(c.x, gy + .05, c.z); SK.blob.rotation.y = -c.yaw; const k = 1.3 + hgt * .06; SK.blob.scale.set(k * .9, 1, k * 1.5); SK.blob.material.opacity = Math.max(0, 1 - hgt / 14) * (1 - .6 * (SK.nightF || 0)); SK.blob.visible = !T.inGap(c.idx); }
+    if (DL && DL.castShadow && SK.sunV) { const v = SK.sunV; DL.position.set(c.x + v.x * 40, c.y + v.y * 40, c.z + v.z * 40); DL.target.position.set(c.x, c.y, c.z); DL.target.updateMatrixWorld();
+      if (!SK.rcv) { SK.rcv = 1; scene.traverse(o => { if (o.isMesh && o.material && o.material.isMeshStandardMaterial && !o.isSkinnedMesh) o.receiveShadow = true; }); } }
+    if (SK.blob) { const gy = KGP.groundAt(T, c.idx, c.d), hgt = Math.max(0, c.y - gy); SK.blob.position.set(c.x, gy + .05, c.z); SK.blob.rotation.y = -c.yaw; const k = 1.3 + hgt * .06; SK.blob.scale.set(k * .9, 1, k * 1.5); SK.blob.material.opacity = Math.max(0, 1 - hgt / 14) * (1 - .6 * (SK.nightF || 0)) * .45; SK.blob.visible = !T.inGap(c.idx); }
     if (SK.motes) { const { pts, pos, n } = SK.motes, cp = camera.position; for (let k = 0; k < n; k++) { const j = k * 3; pos[j + 1] += Math.sin(time * .7 + k) * .01;
         for (let ax = 0; ax < 3; ax++) { const half = ax === 1 ? 30 : 60, cc = ax === 0 ? cp.x : ax === 1 ? cp.y : cp.z; let v = pos[j + ax]; while (v - cc > half) v -= half * 2; while (v - cc < -half) v += half * 2; pos[j + ax] = v; } }
       pts.geometry.attributes.position.needsUpdate = true; pts.material.color.copy(U.uSun.value).lerp(hc1.setHex(0xffe2a0), .5); }
@@ -1727,7 +1808,7 @@ const View = (() => {
     const N = T.N, hw = T.halfW;
     // ramps
     for (const r of T.ramps) { const pos = [], uv = [], idx = []; const rows = 8; for (let k = 0; k <= rows; k++) { const fi = r.i0 + r.len * k / rows * .999; pos.push(...P(fi, -hw + .1, .02), ...P(fi, hw - .1, .02)); uv.push(0, k * .5, 4, k * .5); if (k) { const q = k * 2; idx.push(q - 2, q - 1, q, q - 1, q + 1, q); } }
-      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); const m = new THREE.Mesh(g, basic({ map: chevronTex() })); m.frustumCulled = false; scene.add(m);
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); let rmat = null; if (T.heaven) { g.computeVertexNormals(); if (!SK.rampMat) SK.rampMat = new THREE.MeshStandardMaterial(Object.assign(pbrT('metal_plate', 1, 1), { color: 0xb8bcc4, roughness: 1, metalness: .55, envMapIntensity: 1, side: THREE.DoubleSide })); rmat = SK.rampMat; } const m = new THREE.Mesh(g, rmat || basic({ map: chevronTex() })); m.frustumCulled = false; scene.add(m);
       const e = r.i0 + r.len * .999, a = P(e, -hw + .1, .02), b = P(e, hw - .1, .02), a0 = P(e + .5, -hw + .1, 0), b0 = P(e + .5, hw - .1, 0); const fg = new THREE.BufferGeometry(); fg.setAttribute('position', new THREE.Float32BufferAttribute([...a, ...b, b[0], b0[1], b[2], a[0], a0[1], a[2]], 3)); fg.setIndex([0, 1, 2, 0, 2, 3]); scene.add(new THREE.Mesh(fg, basic({ color: 0x0b0c10 }))); }
     // start line + gantry
     { const a = P(-1.2, -hw + .3, .03), b = P(-1.2, hw - .3, .03), c2 = P(1.2, hw - .3, .03), d2 = P(1.2, -hw + .3, .03); const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute([...a, ...b, ...c2, ...d2], 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 1, 1, 0, 1], 2)); g.setIndex([0, 1, 2, 0, 2, 3]); const sl = new THREE.Mesh(g, basic({ map: checkerTex() })); scene.add(sl); hideInRefl.push(sl);
@@ -1759,12 +1840,17 @@ const View = (() => {
     const L2 = lo.clone(true), U2 = up.clone(true); U2.position.set(0, 0, 0); toonify(L2, r.colors); toonify(U2, r.colors); inkOutline(L2, 1.05); inkOutline(U2, 1.05);
     r.body.children.forEach(ch => { if (ch !== r.upper) ch.visible = false; }); r.upper.children.forEach(ch => ch.visible = false); r.body.add(L2); r.upper.add(U2); r.riderModel = true; }
   // ---- 人の3Dモデル（HEAVEN ASCENT の自分のライダー） ----
+  function useScooterReal(r) { const g = MODELS.scooterReal; if (!g || !r || r.realSc || r.isGhost || !T.heaven) return; const m = g.scene.clone(true);
+    m.traverse(o => { if (o.isMesh) { o.frustumCulled = false; o.castShadow = true; o.material = o.material.clone(); o.material.envMapIntensity = /alu|chrome/.test(o.material.name) ? 1.2 : .7; } });
+    r.sc.children.forEach(ch => ch.visible = false); r.sc.add(m); const wf = m.getObjectByName('WheelF'), wr = m.getObjectByName('WheelR'); if (wf && wr) r.wheels = [wf, wr]; if (r.under) r.under.visible = false; r.realSc = m; }
+  function setScooterReal(g) { MODELS.scooterReal = g; for (const r of [rider, ...rivals]) useScooterReal(r); }
   function setHuman(g) { MODELS.human = g; if (rider) useHuman(rider); }
-  function useHuman(r) {
-    const g = MODELS.human; if (!g || r.human || !T.heaven) return;
+  function useHuman(r, gIn) {
+    const g = gIn || MODELS.human; if (!g || r.human || !T.heaven) return; const mp = !(g.animations && g.animations.length);
     const h = g.scene; h.updateMatrixWorld(true);
     // 服を明るいグレーのライダースーツに（元の模様は残して色だけ抜く）
-    h.traverse(o => { if (!o.isMesh) return; o.frustumCulled = false; o.castShadow = false; const m0 = o.material; const visor = /Visor/i.test(m0.name || '');
+    if (mp) h.traverse(o => { if (!o.isMesh) return; o.frustumCulled = false; o.castShadow = true; if (o.material) { const m = o.material, thin = /hair|ponytail|eyebrow|eyelash/i.test(o.name); m.transparent = false; m.depthWrite = true; m.alphaTest = thin ? .5 : 0; m.side = thin ? THREE.DoubleSide : THREE.FrontSide; m.envMapIntensity = .8; if (o.material.map) o.material.map.anisotropy = 4; } });
+    if (!mp) h.traverse(o => { if (!o.isMesh) return; o.frustumCulled = false; o.castShadow = false; const m0 = o.material; const visor = /Visor/i.test(m0.name || '');
       const m = new THREE.MeshStandardMaterial({ map: m0.map, color: 0xffffff, roughness: visor ? .18 : .62, metalness: visor ? .4 : 0, skinning: true });
       if (!visor) m.onBeforeCompile = sh => { sh.fragmentShader = sh.fragmentShader.replace('#include <map_fragment>', '#ifdef USE_MAP\n vec4 texelColor = texture2D( map, vUv ); texelColor = mapTexelToLinear( texelColor ); float lum = dot(texelColor.rgb, vec3(.299,.587,.114)); texelColor.rgb = mix(vec3(lum), texelColor.rgb, .12) * 1.75 + .07; diffuseColor *= texelColor;\n#endif'); };
       o.material = m; });
@@ -1773,8 +1859,8 @@ const View = (() => {
     const b = n => h.getObjectByName('mixamorig' + n) || h.getObjectByName('mixamorig:' + n);
     const rot = (n, x, y, z) => { const o = b(n); if (o) { o.rotation.x += x; o.rotation.y += y; o.rotation.z += z; } };
     // 乗る姿勢：両手をハンドルへ、上体を少し前に、前足と後ろ足で膝を曲げる（画面で合わせた値）
-    rot('LeftArm', .9, 0, 0); rot('RightArm', .9, 0, 0); rot('LeftForeArm', .25, 0, 0); rot('RightForeArm', -.25, 0, 0);
-    rot('Spine', .18, 0, 0); rot('LeftUpLeg', -.28, 0, 0); rot('LeftLeg', .35, 0, 0); rot('RightUpLeg', .12, 0, 0); rot('RightLeg', .3, 0, 0);
+    if (!mp) { rot('LeftArm', .9, 0, 0); rot('RightArm', .9, 0, 0); rot('LeftForeArm', .25, 0, 0); rot('RightForeArm', -.25, 0, 0);
+    rot('Spine', .18, 0, 0); rot('LeftUpLeg', -.28, 0, 0); rot('LeftLeg', .35, 0, 0); rot('RightUpLeg', .12, 0, 0); rot('RightLeg', .3, 0, 0); }
     // 大きさを身長1.72mにそろえ、デッキの上に立たせる（前は -z）
     const box = new THREE.Box3().setFromObject(h), hgt = Math.max(.01, box.max.y - box.min.y), k = 1.72 / hgt;
     const holder = new THREE.Group(); holder.add(h); h.scale.multiplyScalar(k); h.position.y -= box.min.y * k; holder.position.set(0, .19, .12);   // このモデルは最初から前（-z）を向いている
@@ -1854,7 +1940,7 @@ const View = (() => {
     for (let k = 0; k < sp.length; k++) { let p = sp[k]; const rel = p ? (p[0] - camera.position.x) * hx + (p[2] - camera.position.z) * hz : -1;
       if (!p || rel < -2) { const f = 14 + Math.random() * 46, side = (Math.random() - .5) * 22, up = Math.random() * 4.5 - .3; if (Math.abs(side) < 2.4) { sp[k] = null; a[k * 6 + 1] = a[k * 6 + 4] = -999; continue; } p = sp[k] = [camera.position.x + hx * f - hz * side, camera.position.y + up - 1.5, camera.position.z + hz * f + hx * side]; }
       a[k * 6] = p[0]; a[k * 6 + 1] = p[1]; a[k * 6 + 2] = p[2]; a[k * 6 + 3] = p[0] + hx * len; a[k * 6 + 4] = p[1]; a[k * 6 + 5] = p[2] + hz * len; }
-    streaks.geometry.attributes.position.needsUpdate = true; streaks.material.opacity = vr * .26 + boostVis * .35;
+    streaks.geometry.attributes.position.needsUpdate = true; streaks.material.opacity = (vr * .26 + boostVis * .35) * (T.heaven ? .3 : 1);
   }
 
   /* ---- per-frame ---- */
@@ -1871,7 +1957,7 @@ const View = (() => {
       set('LeftUpLeg', F * .18 - Hv * .2); set('RightUpLeg', F * .1 - Hv * .16); set('LeftLeg', -F * .22 + Hv * .3); set('RightLeg', -F * .2 + Hv * .26); }
  groundY = c.air ? KGP.groundAt(T, c.idx, c.d) : c.y; const bst = opt.boost || 0; boostVis += (bst - boostVis) * Math.min(1, dt * 8); trail.material.color.setRGB(1, .12 + boostVis * .6, .08 + boostVis * .25);
     const hx = Math.sin(c.yaw), hz = -Math.cos(c.yaw); trailPos.unshift([c.x - hx * .58, c.y + .22, c.z - hz * .58, hz, -hx]); if (trailPos.length > 9) trailPos.pop();
-    const pa = trail.geometry.attributes.position.array; for (let i = 0; i < 9; i++) { const q = trailPos[Math.min(i, trailPos.length - 1)], w = .05 + bst * .16; pa.set([q[0] - q[3] * w, q[1], q[2] - q[4] * w, q[0] + q[3] * w, q[1], q[2] + q[4] * w], i * 6); } trail.geometry.attributes.position.needsUpdate = true; trail.visible = c.v > 4;
+    const pa = trail.geometry.attributes.position.array; for (let i = 0; i < 9; i++) { const q = trailPos[Math.min(i, trailPos.length - 1)], w = .05 + bst * .16; pa.set([q[0] - q[3] * w, q[1], q[2] - q[4] * w, q[0] + q[3] * w, q[1], q[2] + q[4] * w], i * 6); } trail.geometry.attributes.position.needsUpdate = true; trail.visible = c.v > 4 && !T.heaven;
     const inTun = T.theme === 'abyss' ? (camera.position.y < -.3 ? 1 : 0) : (T.S[c.idx].tun ? 1 : 0); tunnelFog += (inTun - tunnelFog) * Math.min(1, dt * 3); scene.fog.color.setHex(TH.fog).lerp(tmpCol.setHex(TH.fogT), tunnelFog); scene.fog.density = lerp(TH.dens, TH.densT, tunnelFog); renderer.setClearColor(scene.fog.color);
     for (const m of [roadMat, puddleMat]) { m.uniforms.fogColor.value.copy(scene.fog.color); m.uniforms.fogDensity.value = scene.fog.density; }
     if (beacons) beacons.material.opacity = .35 + .65 * (Math.sin(time * 2.2) > 0 ? 1 : .15); if (towerLights) towerLights.material.opacity = .75 + .25 * Math.sin(time * 1.3); if (T.theme === 'abyss') abyssTick(c, dt, time, opt.flow || 0); if (T.theme === 'sky') skyTick(c, dt, time, opt.flow || 0, opt.clock || 0); trail.material.color.lerp(tmpCol.setHex(0xFFD36B), clamp(((opt.flow || 0) - .6) * 2.5, 0, 1));
@@ -1958,7 +2044,7 @@ const View = (() => {
   const fwq = []; function fireworks(c, n = 5) { const hx = Math.sin(c.yaw), hz = -Math.cos(c.yaw); for (let k = 0; k < n; k++) fwq.push({ t: k * .35 + Math.random() * .2, x: c.x + hx * (18 + Math.random() * 30) + (Math.random() - .5) * 30, y: c.y + 14 + Math.random() * 14, z: c.z + hz * (18 + Math.random() * 30) + (Math.random() - .5) * 30, col: [[1, .83, .42], [.22, .9, .88], [1, .45, .37], [.95, .95, .9]][k % 4] }); }
   function hitSparks(c, n = 26) { burst(c.x + Math.sin(c.yaw) * .6, c.y + .6, c.z - Math.cos(c.yaw) * .6, n, [1, .7, .3], 8, 5); }
   function setSkin(sk) { curSkin = sk; if (!rider || !sk) return; const vis = rider.root.visible; scene.remove(rider.root); rider = makeRider(false, sk.acc, 0x7d8796, false, sk); rider.root.visible = vis; scene.add(rider.root); }
-  return { comfort: false, kick: k => { fovK = Math.min(1.3, fovK + (View.comfort ? k * .35 : k)); }, setHuman, setSkyEvent, setModel, setSkin, fireworks, popEvent, init, resize, update, render, setGhost, setRivals, setRivalNames, setCars, setBoxes, hitSparks, shake, resetCam, setQuality, wallSparks, get quality() { return quality; }, get hasBloom() { return !!composer; } };
+  return { setScooterReal, setRivalHuman: (k, g) => { const r = rivals[k]; if (r && !r.human) useHuman(r, g); }, comfort: false, kick: k => { fovK = Math.min(1.3, fovK + (View.comfort ? k * .35 : k)); }, setHuman, setSkyEvent, setModel, setSkin, fireworks, popEvent, init, resize, update, render, setGhost, setRivals, setRivalNames, setCars, setBoxes, hitSparks, shake, resetCam, setQuality, wallSparks, get quality() { return quality; }, get hasBloom() { return !!composer; } };
 })();
 
 const ONLINE = window.KICK_GP_ONLINE || {};
@@ -2040,7 +2126,8 @@ class KRoom {
   if (coarse) { const fb = document.getElementById('fpsBadge'); let fc = 0, ft = performance.now(); fb.hidden = false; (function fl(now) { fc++; if (now - ft > 1000) { fb.textContent = Math.round(fc * 1000 / (now - ft)) + 'fps ×' + RS.toFixed(2) + ' q' + View.quality; fc = 0; ft = now; } requestAnimationFrame(fl); })(ft); }
   try { const M = window.KGP_MODELS; if (M && THREE.GLTFLoader) for (const name of Object.keys(M)) { const bin = atob(M[name]), buf = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
       new THREE.GLTFLoader().parse(buf.buffer, '', g => { View.setModel(name, g.scene); window.__kgpModel = (window.__kgpModel || '') + name + ' '; }, e => console.warn('model', name, e)); } } catch (e) { console.warn('model', e); }
-  if (T.heaven && THREE.GLTFLoader) fetch('human.glb').then(r => r.ok ? r.arrayBuffer() : Promise.reject(r.status)).then(ab => new THREE.GLTFLoader().parse(ab, '', g => View.setHuman(g), e => console.warn('human', e))).catch(e => console.warn('human', e));
+  if (T.heaven && THREE.GLTFLoader) { const ld = (u, f) => fetch(u).then(r => r.ok ? r.arrayBuffer() : Promise.reject(r.status)).then(ab => new THREE.GLTFLoader().parse(ab, '', f, e => console.warn('human', u, e))).catch(e => console.warn('human', u, e));
+    ld('world/scooter_real.glb', g => View.setScooterReal(g)); ld('world/rider_you.glb', g => View.setHuman(g)); ['ren', 'mika', 'zed'].forEach((n, k) => ld('world/rider_' + n + '.glb', g => View.setRivalHuman(k, g))); }
   let RS = 1; try { RS = Math.min(1, Math.max(.6, +localStorage.getItem('kickgp.rs2') || 1)); } catch (e) { }
   function resize() { const w = cv.clientWidth || innerWidth, h = cv.clientHeight || innerHeight; View.resize(w, h, Math.min(2, window.devicePixelRatio || 1) * RS); }
   addEventListener('resize', resize); resize();
