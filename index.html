@@ -268,6 +268,7 @@ button[disabled]{opacity:.4}
 body.heaven #styleBox{display:none!important}
 body.heaven .glass{background:rgba(16,28,48,.32);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);border-color:rgba(245,243,234,.08)}
 body.heaven .cluster{opacity:.82} body.heaven #map{opacity:.75} body.heaven .toast .d{background:rgba(11,19,34,.35)!important;border-bottom-width:1px!important}
+body.lift #hud > *:not(.cluster):not(#pad):not(.pedals){opacity:.12;transition:opacity 1.2s} #hud > *{transition:opacity .6s}
 #flowBox{width:clamp(118px,30vh,160px);margin-bottom:6px;pointer-events:none;transform:skewX(-6deg)}
 #flowBox span{display:block;font:italic 800 12px/1 Saira,sans-serif;letter-spacing:.14em;color:#A5B3C2;margin-bottom:4px}
 #flowBox i{display:block;height:7px;border-radius:4px;background:rgba(16,28,48,.7);overflow:hidden;border:1px solid rgba(57,231,224,.35)}
@@ -412,6 +413,7 @@ body.heaven .cluster{opacity:.82} body.heaven #map{opacity:.75} body.heaven .toa
     <div class="lights" id="lights" hidden><i></i><i></i><i></i><i></i><i></i></div>
     <div class="flag" id="flag" hidden></div>
     <div id="airTip" hidden style="position:absolute;left:50%;bottom:calc(clamp(120px,36vh,160px) + env(safe-area-inset-bottom,0px));transform:translateX(-50%);font:italic 800 15px/1 Saira,'Hiragino Sans',sans-serif;letter-spacing:.12em;color:#fff;text-shadow:0 2px 10px rgba(0,0,0,.8);pointer-events:none;white-space:nowrap">◀ ▶ はじいて回転</div>
+    <div id="edgeGlow" style="position:absolute;top:0;bottom:0;width:22vw;pointer-events:none;opacity:0;transition:opacity .15s;background:linear-gradient(90deg,rgba(111,232,255,.38),rgba(111,232,255,0))"></div>
     <div class="cluster" id="cluster">
       <svg viewBox="0 0 240 128" aria-hidden="true"><path class="bgp" d="M4 126 A116 116 0 0 1 236 126 Z"/><path class="tr" d="M22 120 A98 98 0 0 1 218 120"/><path class="rz" id="arcRed" d="M22 120 A98 98 0 0 1 218 120"/><path class="sp" id="arcSpd" d="M22 120 A98 98 0 0 1 218 120"/><path class="gt" d="M37 120 A83 83 0 0 1 203 120"/><path class="gr" id="arcGrip" d="M37 120 A83 83 0 0 1 203 120"/><g id="ticks"></g></svg>
       <div class="c-num num" id="spd">0</div><div class="c-unit">KM/H</div>
@@ -553,15 +555,15 @@ const KGP = (() => {
         [220, 0, 4.0, 0, 0], [208, 86, 14.7, 0.07, 0], [163, 163, 26.1, 0.07, 0], [90, 217, 37.8, 0.07, 0], [0, 240, 49.7, 0.07, 0],
         [-94, 226, 61.8, 0.07, 0], [-177, 177, 74.0, 0.07, 0], [-236, 98, 86.3, 0.07, 0], [-260, 0, 98.7, 0.07, 0], [-245, -101, 111.1, 0.07, 0],
         [-191, -191, 123.7, 0.07, 0], [-105, -254, 136.2, 0.07, 0], [0, -280, 148.9, 0.07, 0], [109, -263, 161.6, 0.07, 0], [205, -205, 174.4, 0.07, 0],
-        [273, -113, 187.2, 0.07, 0], [300, 0, 200.0, 0, 0], [345, 85, 203.0, 0, 0], [460, 125, 190.0, -0.07, 0], [560, 40, 160.0, -0.07, 0],
-        [565, -110, 118.0, -0.07, 0], [470, -215, 74.0, -0.07, 0], [350, -205, 38.0, -0.07, 0], [262, -120, 14.0, 0, 0], [228, -55, 5.0, -0.07, 0],
+        [273, -113, 192.0, 0.07, 0], [300, 0, 222.0, 0, 0], [345, 85, 238.0, 0, 0], [460, 125, 172.0, -0.07, 0], [560, 40, 118.0, -0.07, 0],
+        [565, -110, 84.0, -0.07, 0], [470, -215, 74.0, -0.07, 0], [350, -205, 38.0, -0.07, 0], [262, -120, 14.0, 0, 0], [228, -55, 5.0, -0.07, 0],
       ],
       feat: T => { const at = f => Math.round(f * T.N) % T.N, S = T.S, N = T.N;
         // 頂上（天の門）と、その先の大ジャンプ
         let top = at(.62), hi = -1e9; for (let i = at(.5); i < at(.75); i++) if (S[i].y > hi) { hi = S[i].y; top = i; }
-        T.top = top;
+        T.top = top; T.lift = { i0: (top - 62 + N) % N, len: 60, v: 9.5 };
         T.ramps = [{ i0: (top + 40) % N, len: 16, h: 3.0 }, { i0: at(.755), len: 14, h: 2.6 }]; T.ramp = T.ramps[0];
-        for (const [f, h] of [[.07, 2.4], [.195, 2.7], [.505, 2.6], [.545, 3.0], [.79, 2.8], [.925, 2.6], [.97, 3.2]]) T.ramps.push({ i0: at(f), len: 13, h });
+        for (const [f, h] of [[.07, 2.4], [.195, 2.7], [.79, 2.8], [.925, 2.6], [.97, 3.2]]) T.ramps.push({ i0: at(f), len: 13, h });
         // 仕掛け：上昇気流（v=打ち上げの強さ）と雲のトランポリン
         T.lifts = [
           { i: at(.135), d: 0, r: T.halfW + .3, v: 13, k: .7, t: 'updraft' },
@@ -578,7 +580,10 @@ const KGP = (() => {
         T.rings.push({ i: at(.146), d: 0, r: 4.2, up: 9 }, { i: at(.442), d: -1, r: 4.2, up: 12 }, { i: at(.45), d: 1, r: 4.2, up: 13 }, { i: (at(.755) + 26) % N, d: 0, r: 4.4, up: 5 });
         T.pads = [at(.02), at(.03), at(.31), at(.32), at(.6), at(.61)].map((i, k) => ({ i, d: k % 2 ? 1.2 : -1.2 }));
         T.open = [{ i0: at(.82), i1: at(.86) }];
-        T.dividers = [{ i0: at(.595), i1: at(.64) }];
+        T.dividers = [{ i0: at(.595), i1: at(.615) }, { i0: at(.553), i1: at(.586) }];
+        T.glass = { i0: at(.555), i1: at(.584) };
+        T.open.push({ i0: at(.555), i1: at(.584) });
+        for (const f of [.557, .561, .565, .569, .573, .577, .581]) T.pads.push({ i: at(f), d: -1.75 });
         // 鯨の潮吹き：夕焼けの空を並んで泳ぐ鯨が、潮を吹いて空へ打ち上げる
         T.whale = { i0: at(.28), i1: at(.372) }; T.lifts.push({ i: at(.362), d: 0, r: T.halfW + .3, v: 15, k: .8, t: 'spout' });
         T.rings.push({ i: at(.37), d: 0, r: 4.4, up: 11 });
@@ -722,7 +727,7 @@ const KGP = (() => {
       if (inp.throttle > 0) aLong += U.accel * (c.mA || 1) * inp.throttle * Math.max(0, 1 - Math.pow(c.v / vmax, U.accelCurve));
       aLong -= U.rollDrag + G * sp.slope * Math.cos(angDiff(c.yaw, Math.atan2(sp.tx, -sp.tz)));
     }
-    aLong -= U.airDrag * (c.mD || 1) * lerp(1, U.tuckAir, tuck) * c.v * c.v;
+    aLong -= U.airDrag * (c.mD || 1) * lerp(1, U.tuckAir, tuck) * c.v * c.v * (T.heaven && !c.air && sp.slope < -.2 ? .35 : 1);
     let brakeA = 0; if (!c.air && inp.brake > 0) { brakeA = Math.min(U.brake * inp.brake * lerp(lerp(1, U.brakeBack, back), U.brakeTuck, tuck), mu * G * .96); aLong -= brakeA; }
     // --- lean follows the stick with lag; lean makes the turn
     const cap = U.muDry * G * U.overSteerInput; const wob = c.wobble > 0 ? Math.sin(c.wobble * 38) * .22 * Math.min(1, c.wobble * 2) : 0;
@@ -748,6 +753,9 @@ const KGP = (() => {
     if (Math.abs(l2.d) > lim && !(c.noRail && T.isOpen && T.isOpen(l2.i) && !T.assist)) { const p = T.S[l2.i], side = Math.sign(l2.d), pen = Math.abs(l2.d) - lim; c.x -= p.nx * side * pen; c.z -= p.nz * side * pen;
       const tyaw = Math.atan2(p.tx, -p.tz), da = angDiff(c.yaw, tyaw), into = Math.sin(da) * side; // >0: heading into the wall
       if (into > 0) { const loss = clamp(U.wallLoss * (c.hit > 0 ? .15 : 1) + U.wallAngleLoss * into, 0, .85); if (c.hit <= 0 && c.v > 3) ev.wall = c.v * (0.3 + into); c.v *= 1 - loss * (c.hit > 0 ? .25 : 1); c.yaw = tyaw + da * 0.35 - side * 0.04; c.lean *= .5; c.hit = .35; } }
+    if (T.lift && !c.air) { const la = (c.idx - T.lift.i0 + T.N) % T.N; c.onLift = la < T.lift.len; if (c.onLift) c.v += (T.lift.v - c.v) * .06; } else c.onLift = false;
+    if (T.glass && !c.air && c.d < -.3) { const ga = (c.idx - T.glass.i0 + T.N) % T.N; if (ga < T.glass.i1 - T.glass.i0) { c.v += 8 * DT; c.onGlass = true; } else c.onGlass = false; } else c.onGlass = false;
+    if (T.heaven && !c.air) { const edge = Math.abs(c.d) - (T.halfW - 1.0); c.edge = edge > 0 ? Math.min(1, edge / .55) : 0; if (c.edge > 0 && c.v > 12) c.v += 2.4 * c.edge * DT; } else c.edge = 0;
     if (T.assist || T.heaven) { const pq = T.S[c.idx], ty = Math.atan2(pq.tx, -pq.tz), dd = angDiff(c.yaw, ty), mx = T.assist ? .55 : 1.0; if (Math.abs(dd) > mx) c.yaw = ty + Math.sign(dd) * (mx + (Math.abs(dd) - mx) * .9); }
     if (c.hit > 0) c.hit -= DT; if (c.wobble > 0) c.wobble -= DT; if (c.land > 0) c.land -= DT;
     // --- vertical: stick to the ground unless it falls away faster than gravity
@@ -835,7 +843,7 @@ KGP.Race = (() => {
       const ev = KGP.step(T, c, inp); if (ev.wall > 21 && r.inv <= 0 && !hold) wipe(r, out, 'WALL');
       if (!hold && !c.air && r.isPlayer && !T.assist && T.isOpen && T.isOpen(c.idx) && Math.abs(c.d) > T.halfW + .25) { const nc = KGP.spawn(T, (c.idx + 6) % N, 0); nc.v = Math.max(10, c.v * .5); nc.dist = c.dist; nc.noRail = true; Object.assign(c, nc); r.inv = 1.2; r.boost = Math.max(0, r.boost - .3); if (r.isPlayer) out.fall = true; }
       if (!hold && r.isPlayer && T.blocks.length && !c.air && !(r.inv > 0)) for (const b of T.blocks) { const bd = b.amp * Math.sin(R.t * b.w + b.ph), a = wrap(prevIdx - b.i, N), bb = wrap(c.idx - b.i, N); if (a <= 0 && bb >= 0 && Math.abs(c.d - bd) < 1.15) { c.v *= .5; r.boost = Math.max(0, r.boost - .25); r.inv = .9; out.block = true; } }
-      if (!hold && !c.air && T.inDiv && T.inDiv(c.idx) && Math.abs(c.d) < .5) { const sg = Math.sign(c.d) || 1, p = T.S[c.idx]; c.x += p.nx * sg * (.5 - Math.abs(c.d)); c.z += p.nz * sg * (.5 - Math.abs(c.d)); c.d = sg * .5; c.v *= .985; if (r.isPlayer) out.scrape = true; }
+      if (!hold && !c.air && T.inDiv && T.inDiv(c.idx) && Math.abs(c.d) < .5) { const sg = Math.sign(c.d) || 1, p = T.S[c.idx]; c.x += p.nx * sg * (.5 - Math.abs(c.d)); c.z += p.nz * sg * (.5 - Math.abs(c.d)); c.d = sg * .5; c.v *= T.heaven ? .997 : .985; if (T.heaven) { const ty = Math.atan2(p.tx, -p.tz); c.yaw = ty + angDiff(c.yaw, ty) * .5; } if (r.isPlayer) out.scrape = true; }
       if (!hold && T.pads.length && !c.air) for (const g of T.pads) { const a = wrap(prevIdx - g.i, N), b = wrap(c.idx - g.i, N); if (a < 0 && b >= 0 && Math.abs(c.d - g.d) < 1.3) { r.kick = Math.max(r.kick, .9); r.boost = Math.min(1, r.boost + .08); if (r.isPlayer) out.pad = true; } }
       if (T.gaps && !c.air && !hold) for (const gp of T.gaps) { const a = (c.idx - gp.i0 + N) % N, len = (gp.i1 - gp.i0 + N) % N; if (a <= len) { if (gp.wire && (Math.abs(c.d - gp.d) < (T.assist ? T.halfW + .6 : .8) || !r.isPlayer)) { r.kick = Math.max(r.kick, .45); if (r.isPlayer) out.wire = true; continue; } if (T.assist && r.isPlayer) { c.vy = Math.max(c.vy, 9.5); c.y += .3; c.air = true; c.v = Math.max(c.v, 24); r.kick = Math.max(r.kick, .5); out.save = true; break; }
         const ni = (gp.i1 + 4) % N, nc = KGP.spawn(T, ni, clamp(c.d, -1.5, 1.5)); nc.v = Math.max(9, c.v * .45); nc.dist = c.dist; Object.assign(c, nc); r.inv = 1.4; r.boost = Math.max(0, r.boost - .3); if (r.isPlayer) out.fall = true; break; } }
@@ -962,7 +970,17 @@ const View = (() => {
     // road + puddles share the reflection shader
     const rtex = roadTex(); roadMat = new THREE.ShaderMaterial({ uniforms: roadU(), vertexShader: ROAD_VS, fragmentShader: ROAD_FS, side: THREE.DoubleSide }); roadMat.uniforms.map.value = rtex;
     if (abyss) { roadMat.uniforms.uTint.value.setRGB(.42, .68, .95); roadMat.uniforms.uWet.value = .7; } if (skyT) { roadMat.uniforms.map.value = T.heaven ? stoneTex(false) : marbleTex(); roadMat.uniforms.uTint.value.setRGB(1, 1, 1); roadMat.uniforms.uWet.value = .28; }
-    for (const [a, b] of solidSegs()) hideInRefl.push(ribbon(a, b, () => [-hw, 0], () => [hw, 0], roadMat, 0.1));
+    { const gs0 = T.gaps; if (T.glass) T.gaps = (T.gaps || []).concat([T.glass]); const segs = solidSegs(); T.gaps = gs0; for (const [a, b] of segs) hideInRefl.push(ribbon(a, b, () => [-hw, 0], () => [hw, 0], roadMat, 0.1)); }
+    if (T.glass) { const g = T.glass;
+      hideInRefl.push(ribbon(g.i0, g.i1, () => [0, 0], () => [hw, 0], roadMat, 0.1));
+      const gc = mkCanvas(128, 256), gx = gc.getContext('2d'); gx.clearRect(0, 0, 128, 256); gx.strokeStyle = 'rgba(220,245,255,.9)'; gx.lineWidth = 3; gx.strokeRect(2, 2, 124, 252); gx.strokeStyle = 'rgba(220,245,255,.35)'; gx.lineWidth = 1; gx.beginPath(); gx.moveTo(64, 0); gx.lineTo(64, 256); gx.stroke();
+      const gt = tex(gc, true); gt.repeat.set(1, 1);
+      const gm = new THREE.MeshBasicMaterial({ map: gt, color: 0xcfefff, transparent: true, opacity: .55, depthWrite: false, side: THREE.DoubleSide });
+      const gm2 = new THREE.MeshBasicMaterial({ color: 0x9fd8ff, transparent: true, opacity: .07, depthWrite: false, side: THREE.DoubleSide });
+      ribbon(g.i0, g.i1, () => [-hw, -.01], () => [0, -.01], gm2, 0.1); const gl = ribbon(g.i0, g.i1, () => [-hw, 0], () => [-.16, 0], gm, 0.25); gl.renderOrder = 4;
+      const fm = new THREE.MeshStandardMaterial({ color: 0xc9d2da, roughness: .3, metalness: .9 });
+      ribbon(g.i0, g.i1, () => [-hw - .05, -.12], () => [-hw - .05, .03], fm, 0.1); }
+
     puddleMat = new THREE.ShaderMaterial({ uniforms: roadU(), vertexShader: ROAD_VS, fragmentShader: ROAD_FS, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }); puddleMat.uniforms.map.value = rtex; puddleMat.uniforms.uWet.value = 1.0; puddleMat.uniforms.uTint.value.setRGB(.38, .45, .62);
     for (const w of T.wet) { const i1 = w.i1 < w.i0 ? w.i1 + N : w.i1; hideInRefl.push(ribbon(w.i0, i1, () => [w.d0, .012], () => [w.d1, .012], puddleMat)); hideInRefl.push(ribbon(w.i0, i1, () => [w.d0, .02], () => [w.d0 + .1, .02], add({ color: C.cool, opacity: .55 }))); }
     if (skyT) buildSky(); else if (abyss) buildAbyss(); else buildCity();
@@ -1815,7 +1833,7 @@ const View = (() => {
     cam.shake = Math.max(0, cam.shake - dt * 2.6); const sh = cam.shake * cam.shake * .5 + vr * vr * .014 + boostVis * .03; const jx = (Math.random() - .5) * sh, jy = (Math.random() - .5) * sh;
     camera.position.set(cam.x + jx, Math.max(cam.y + jy, groundY + .35), cam.z); cam.roll += ((-c.lean * .22) - cam.roll) * Math.min(1, dt * 5); camera.up.set(Math.sin(cam.roll) * Math.cos(cam.yaw), Math.cos(cam.roll), Math.sin(cam.roll) * Math.sin(cam.yaw));
     camera.lookAt(c.x + hx * (2.5 + vr * 4), c.y + .78 + vr * .1, c.z + hz * (2.5 + vr * 4));
-    if (T.heaven) { const sl = T.S[c.idx].slope; SK.look = lerp(SK.look || 0, Math.max(0, sl) * 11, Math.min(1, dt * 2)); if (SK.look > .05) camera.lookAt(c.x + hx * (2.5 + vr * 4), c.y + .78 + vr * .1 + SK.look, c.z + hz * (2.5 + vr * 4)); }
+    if (T.heaven) { const sl = T.S[c.idx].slope; SK.look = lerp(SK.look || 0, sl > 0 ? sl * 11 : sl * 6, Math.min(1, dt * 2)); if (Math.abs(SK.look) > .05) camera.lookAt(c.x + hx * (2.5 + vr * 4), c.y + .78 + vr * .1 + SK.look, c.z + hz * (2.5 + vr * 4)); }
     if (T.heaven && SK && SK.cine > 0) heavenCine(c, dt);
     fovK = Math.max(0, fovK - dt * 1.4); const fov = (portrait ? 78 : 56) + 21 * vr * vr + Math.max(0, weight) * 4 + boostVis * 17 + fovK * 16; cam.fov += (fov - cam.fov) * Math.min(1, dt * 4); camera.fov = cam.fov; camera.updateProjectionMatrix();
     stepFx(c, dt);
@@ -2039,6 +2057,7 @@ class KRoom {
     function burst(dur, f, vol) { if (!ac) return; if (T.heaven) { vol *= .3; f = Math.min(f, 1800); } const t = ac.currentTime, s = ac.createBufferSource(); s.buffer = nb; const fl = ac.createBiquadFilter(); fl.type = 'lowpass'; fl.frequency.value = f; const g = ac.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.0001, t + dur); s.connect(fl); fl.connect(g); g.connect(master); s.start(t, Math.random()); s.stop(t + dur + .05); }
     const chord = (fs, step, dur, type, vol) => fs.forEach((f, i) => tone(f, dur, type, vol, null, i * step));
     return { init, frame, music, heaven, heavenDuck,
+      clack: () => { if (!ac) return; const t = ac.currentTime, o = ac.createOscillator(), g = ac.createGain(); o.type = 'square'; o.frequency.setValueAtTime(95, t); g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.09, t + .004); g.gain.exponentialRampToValueAtTime(.0001, t + .06); o.connect(g); g.connect(master); o.start(t); o.stop(t + .08); burst(.03, 3200, .5); },
       perfect: () => { chord([1047, 1319, 1568, 2093], .045, .45, 'triangle', .13); burst(.35, 7000, .22); },
       ring: () => { tone(1568, .5, 'sine', .14); tone(2349, .6, 'sine', .08, null, .05); burst(.4, 6000, .28); },
       whale: () => { tone(110, 1.6, 'sine', .3, 70); tone(165, 1.4, 'triangle', .1, 98, .2); setTimeout(() => burst(1.2, 900, .6), 900); },
@@ -2329,6 +2348,10 @@ class KRoom {
     const prevIdx = car.idx; const live = mode === 'race' || mode === 'finish' || mode === 'result';
     const ev = Race.step(R, inp, !live); car = R.player.c; if (!live) return; raceT += DT; const race = rmode === 'race';
     if (T.heaven) { heavenCk(prevIdx); if (mode === 'race' && HV.rr) { HV.acc += DT; if (HV.acc >= .05) { HV.acc -= .05; HV.rr.push([car.x, car.y, car.z, car.yaw, car.lean, car.idx, car.air ? 1 : 0]); } } if (mode === 'race' && T.top && ((car.idx - (T.top - 75) + N) % N) < 4) vrStart(9); }
+    { const eg = $('#edgeGlow'), e = car.edge || 0; eg.style.opacity = (e * .9).toFixed(2); if (e > 0) { const left = car.d < 0; eg.style.left = left ? '0' : 'auto'; eg.style.right = left ? 'auto' : '0'; eg.style.transform = left ? 'none' : 'scaleX(-1)'; } }
+    if (T.glass) { const ga = (car.idx - T.glass.i0 + 70 + N) % N; if (ga < 4 && !car.glassTold) { car.glassTold = true; toastForce = true; toast('GLASS', 'c', '左はガラスの近道　柵なし', 1.6, true); toastForce = false; } if (ga > 200) car.glassTold = false; }
+    if (T.lift) { const on = !!car.onLift; if (on) { car.clk = (car.clk || 0) - DT; if (car.clk <= 0) { car.clk = .24; Snd.clack(); } Snd.heavenDuck(.4); }
+      if (on !== !!car.wasLift) { document.body.classList.toggle('lift', on); if (!on && ((car.idx - T.lift.i0 + N) % N) >= T.lift.len && ((car.idx - T.lift.i0 + N) % N) < T.lift.len + 20) { ts = .35; tsT = .9; Snd.heavenDuck(1.2); setTimeout(() => { View.kick(1.2); Snd.sky(); }, 650); } car.wasLift = on; } }
     if (ev.takeoff && T.ramps && T.ramps.some(rp => Math.abs(((car.idx - rp.i0 + N) % N) - rp.len) < 12)) { Snd.sky(); ts = .45; tsT = .35; View.shake(.4); }
     if (ev.land) st.air += ev.land.airT;
     // FLOW: earned by riding the line, clean drifts, rings and landings; spent nowhere — it amplifies BOOST and top speed
@@ -2347,7 +2370,7 @@ class KRoom {
     // 空中トリック（HEAVEN ASCENT）
     if (T.heaven && mode === 'race') { const P2 = R.player;
       if (car.chainT > 0 && (car.chainT -= DT) <= 0) car.chain = 0;
-      if (car.air && inp.bst && car.vy < -2.4) car.vy += (-2.4 - car.vy) * .12;
+      if (car.air && inp.boost && car.vy < -2.4) car.vy += (-2.4 - car.vy) * .12;
       { const sg = Math.abs(inp.steer) > .55 ? Math.sign(inp.steer) : 0;
         if (car.air && car.airT > .12) { if (sg && sg !== car.flk) { car.spinT = (car.spinT || 0) + sg * Math.PI * 2; car.trick = true; } }
         car.flk = sg; }
@@ -2413,7 +2436,7 @@ class KRoom {
       R.cars.forEach((c, i) => { const ds = wrapN(car.idx - c.fi), sgn = ds >= 0 ? 1 : -1; if (carSide[i] === -1 && sgn === 1 && Math.abs(ds) < 6 && car.v - c.v > 3) Snd.whoosh(Math.abs(car.d - c.d)); carSide[i] = sgn; });
       if (race) { if (comboT > 0 && (comboT -= dt) <= 0) combo = 0; if (P.slip && mode === 'race') { draftAcc += dt; if (draftAcc > .5) { draftAcc = 0; addStyle(30, false); } }
         el.styleN.textContent = style.toLocaleString('en-US'); el.comboN.textContent = combo > 1 ? '×' + combo : ''; el.comboBar.style.width = (combo > 0 ? clamp(comboT / 5, 0, 1) * 100 : 0) + '%';
-        if (T.heaven && mode !== 'count') { if (!$('#hint').hidden) $('#hint').hidden = true; } else if (save.races < 3) { hintT += dt; const h = mode === 'count' ? (T.heaven ? 'ジャンプ台で飛んだら、左右に倒し続けて回転。きれいに着地すると加速。空中で BOOST 長押しで滑空' : '左親指で左右に曲がる。アクセルは自動。GOの瞬間に BOOST でロケットスタート') : hintT < 10 ? '光るラインの上を走ると FLOW がたまる' : hintT < 20 ? 'カーブの手前で大きく倒すと DRIFT。戻した瞬間に加速' : hintT < 29 ? '速度を落とさずラインに戻せば PERFECT DRIFT' : hintT < 37 ? 'FLOW が高いほど BOOST が強くなる' : ''; if (el.hint.dataset.h !== h) { el.hint.dataset.h = h; el.hint.textContent = h; } el.hint.hidden = !h || mode === 'finish'; } }
+        if (T.heaven && mode !== 'count') { if (!$('#hint').hidden) $('#hint').hidden = true; } else if (save.races < 3) { hintT += dt; const h = mode === 'count' ? (T.heaven ? 'ジャンプ台で飛んだら、左右に1回はじくと1回転。回りきって着地すると加速。空中で BOOST 長押しで滑空' : '左親指で左右に曲がる。アクセルは自動。GOの瞬間に BOOST でロケットスタート') : hintT < 10 ? '光るラインの上を走ると FLOW がたまる' : hintT < 20 ? 'カーブの手前で大きく倒すと DRIFT。戻した瞬間に加速' : hintT < 29 ? '速度を落とさずラインに戻せば PERFECT DRIFT' : hintT < 37 ? 'FLOW が高いほど BOOST が強くなる' : ''; if (el.hint.dataset.h !== h) { el.hint.dataset.h = h; el.hint.textContent = h; } el.hint.hidden = !h || mode === 'finish'; } }
       { const ve = View.popEvent(); if (ve === 'whale') { toast('WHALE', 'c', '', .9, true); Snd.whale(); buzz([20, 40, 20]); addStyle(300, false); } else if (ve === 'cloud') { toast('CLOUD BREAK', 'c', '雲を突き抜けた', 1.0, true); Snd.cloud(); View.shake(.55); buzz([15, 30, 15]); addStyle(200, false); } else if (ve && ve.startsWith('sky:')) { skySeen(ve.slice(4)); } else if (ve === 'gate') { toast('HEAVEN GATE', 'y', '天の門', 2.0, true); Snd.gate(); Snd.heavenDuck(1.6); flash(.75); buzz([30, 60, 30, 60, 90]); addStyle(500, false); ts = .3; tsT = 1.5; } }
       flowFill.style.width = flow.toFixed(0) + '%'; flowLab.textContent = ['CRUISE', 'LEAN', 'FLOW', 'FLOW ++', 'APEX'][flowLv]; flowBox.className = 'lv' + flowLv; flowBox.hidden = !race;
       if (bst && !wasBoost) { Snd.boostOn(); buzz(20); } wasBoost = !!bst; el.bfx.style.opacity = bst ? 1 : 0;
